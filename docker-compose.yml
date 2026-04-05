@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  sira-software:
+    build: .
+    container_name: sira-software-pro
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-sira-pro-secret-key-2024}
+      - NODE_ENV=production
+    volumes:
+      - ./backend/db.json:/app/backend/db.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sira-network
+
+networks:
+  sira-network:
+    driver: bridge
