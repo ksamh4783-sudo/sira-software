@@ -21,9 +21,11 @@ WORKDIR /app
 
 # Install backend dependencies
 COPY backend/package*.json ./backend/
-RUN cd backend && npm ci --only=production
+WORKDIR /app/backend
+RUN npm ci --only=production
 
 # Copy backend files
+WORKDIR /app
 COPY backend/ ./backend/
 
 # Copy built frontend
