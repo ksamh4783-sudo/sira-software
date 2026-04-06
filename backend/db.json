@@ -1,0 +1,30 @@
+{
+  "users": [
+    {
+      "id": "9ec30670-d07d-44c9-b102-66c9870de08a",
+      "email": "admin@sira.software",
+      "password": "$2a$12$5c4XQ91APmZgEHEmJq1Dk.3Wtzl4SZK037NsezZJtLTqs37ttcvGC",
+      "name": "المشرف",
+      "role": "admin",
+      "avatar": "",
+      "subscriptionPlan": "enterprise",
+      "subscriptionStatus": "active",
+      "subscriptionExpiry": "2027-04-06T22:12:07.539Z",
+      "companyName": "Sira Software",
+      "phone": "+201065063147",
+      "address": "Cairo, Egypt",
+      "createdAt": "2026-04-06T22:12:07.540Z",
+      "lastLogin": null,
+      "isActive": true
+    }
+  ],
+  "routers": [],
+  "vouchers": [],
+  "backgrounds": [],
+  "printCards": [],
+  "hotspotPages": [],
+  "activityLogs": [],
+  "fingerprintDevices": [],
+  "dvrCameras": [],
+  "settings": {}
+}

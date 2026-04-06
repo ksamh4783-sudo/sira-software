@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { printCardsApi } from '@/services/localApi';
+import { printCardsApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -66,7 +66,7 @@ export default function PrintCards() {
 
   const fetchCards = () => {
     if (!user) return;
-    const result = printCardsApi.getAll(user.id);
+    const result = printCardsApi.getAll();
     if (result.success && result.data) {
       setCards(result.data);
     }
@@ -76,7 +76,7 @@ export default function PrintCards() {
     e.preventDefault();
     if (!user) return;
 
-    const result = printCardsApi.create(user.id, formData);
+    const result = printCardsApi.create(formData);
     if (result.success) {
       toast.success('تم إنشاء كرت الطباعة بنجاح');
       fetchCards();
@@ -88,7 +88,7 @@ export default function PrintCards() {
   const handleDelete = (card: PrintCard) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذا الكرت؟')) {
-      const result = printCardsApi.delete(user.id, card.id);
+      const result = printCardsApi.delete(card.id);
       if (result.success) {
         toast.success('تم حذف الكرت بنجاح');
         fetchCards();

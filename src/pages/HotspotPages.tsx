@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { hotspotPagesApi } from '@/services/localApi';
+import { hotspotPagesApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -63,7 +63,7 @@ export default function HotspotPages() {
 
   const fetchPages = () => {
     if (!user) return;
-    const result = hotspotPagesApi.getAll(user.id);
+    const result = hotspotPagesApi.getAll();
     if (result.success && result.data) {
       setPages(result.data);
     }
@@ -73,7 +73,7 @@ export default function HotspotPages() {
     e.preventDefault();
     if (!user) return;
 
-    const result = hotspotPagesApi.create(user.id, formData);
+    const result = hotspotPagesApi.create(formData);
     if (result.success) {
       toast.success('تم إنشاء صفحة الهوت سبوت بنجاح');
       fetchPages();
@@ -85,7 +85,7 @@ export default function HotspotPages() {
   const handleDelete = (page: HotspotPage) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذه الصفحة؟')) {
-      const result = hotspotPagesApi.delete(user.id, page.id);
+      const result = hotspotPagesApi.delete(page.id);
       if (result.success) {
         toast.success('تم حذف الصفحة بنجاح');
         fetchPages();
@@ -95,7 +95,7 @@ export default function HotspotPages() {
 
   const handleToggleActive = (page: HotspotPage) => {
     if (!user) return;
-    const result = hotspotPagesApi.update(user.id, page.id, { isActive: !page.isActive });
+    const result = hotspotPagesApi.update(page.id, { isActive: !page.isActive });
     if (result.success) {
       toast.success(page.isActive ? 'تم إلغاء تفعيل الصفحة' : 'تم تفعيل الصفحة');
       fetchPages();

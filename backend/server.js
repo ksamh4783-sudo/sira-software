@@ -19,6 +19,20 @@ app.use(cors({ origin: '*', credentials: true }))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+// Serve static files from the 'dist' or 'public' directory (Vite build output)
+const distPath = join(__dirname, '../dist')
+const publicPath = join(__dirname, '../public')
+
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath))
+  console.log(`✅ Serving static files from: ${distPath}`)
+} else if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath))
+  console.log(`✅ Serving static files from: ${publicPath}`)
+} else {
+  console.log('⚠️ Frontend directory not found, static files not served')
+}
+
 // Database
 let db = { 
   users: [], 
@@ -28,6 +42,8 @@ let db = {
   printCards: [], 
   hotspotPages: [],
   activityLogs: [],
+  fingerprintDevices: [],
+  dvrCameras: [],
   settings: {}
 }
 const dbPath = join(__dirname, 'db.json')
@@ -809,6 +825,122 @@ app.delete('/api/hotspot-pages/:id', authenticateToken, async (req, res) => {
   }
 })
 
+// ==================== FINGERPRINT DEVICES ====================
+
+app.get('/api/fingerprint', authenticateToken, (req, res) => {
+  const userDevices = db.fingerprintDevices.filter(d => d.companyId === req.user.id)
+  res.json({ success: true, data: userDevices })
+})
+
+app.post('/api/fingerprint', authenticateToken, async (req, res) => {
+  try {
+    const { name, ipAddress, port, model, serialNumber, location } = req.body
+    const device = {
+      id: uuidv4(),
+      name,
+      ipAddress,
+      port: port || 4370,
+      status: 'offline',
+      model,
+      serialNumber,
+      location,
+      totalUsers: 0,
+      companyId: req.user.id,
+      createdAt: new Date().toISOString()
+    }
+    db.fingerprintDevices.push(device)
+    saveDB()
+    res.json({ success: true, data: device })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create device', success: false })
+  }
+})
+
+app.put('/api/fingerprint/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const index = db.fingerprintDevices.findIndex(d => d.id === id && d.companyId === req.user.id)
+    if (index === -1) return res.status(404).json({ error: 'Device not found', success: false })
+    db.fingerprintDevices[index] = { ...db.fingerprintDevices[index], ...req.body, updatedAt: new Date().toISOString() }
+    saveDB()
+    res.json({ success: true, data: db.fingerprintDevices[index] })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update device', success: false })
+  }
+})
+
+app.delete('/api/fingerprint/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const index = db.fingerprintDevices.findIndex(d => d.id === id && d.companyId === req.user.id)
+    if (index === -1) return res.status(404).json({ error: 'Device not found', success: false })
+    db.fingerprintDevices.splice(index, 1)
+    saveDB()
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete device', success: false })
+  }
+})
+
+// ==================== DVR CAMERAS ====================
+
+app.get('/api/dvr', authenticateToken, (req, res) => {
+  const userCameras = db.dvrCameras.filter(c => c.companyId === req.user.id)
+  res.json({ success: true, data: userCameras })
+})
+
+app.post('/api/dvr', authenticateToken, async (req, res) => {
+  try {
+    const { name, ipAddress, port, model, channel, username, password, location, streamUrl } = req.body
+    const camera = {
+      id: uuidv4(),
+      name,
+      ipAddress,
+      port: port || 80,
+      status: 'offline',
+      model,
+      channel: channel || 1,
+      username: username || 'admin',
+      password,
+      location,
+      streamUrl,
+      companyId: req.user.id,
+      createdAt: new Date().toISOString()
+    }
+    db.dvrCameras.push(camera)
+    saveDB()
+    res.json({ success: true, data: camera })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create camera', success: false })
+  }
+})
+
+app.put('/api/dvr/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const index = db.dvrCameras.findIndex(c => c.id === id && c.companyId === req.user.id)
+    if (index === -1) return res.status(404).json({ error: 'Camera not found', success: false })
+    db.dvrCameras[index] = { ...db.dvrCameras[index], ...req.body, updatedAt: new Date().toISOString() }
+    saveDB()
+    res.json({ success: true, data: db.dvrCameras[index] })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update camera', success: false })
+  }
+})
+
+app.delete('/api/dvr/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const index = db.dvrCameras.findIndex(c => c.id === id && c.companyId === req.user.id)
+    if (index === -1) return res.status(404).json({ error: 'Camera not found', success: false })
+    db.dvrCameras.splice(index, 1)
+    saveDB()
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete camera', success: false })
+  }
+})
+
 // ==================== ACTIVITY LOGS ====================
 
 app.get('/api/activity', authenticateToken, (req, res) => {
@@ -843,6 +975,20 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`║  ⏰ Started: ${new Date().toLocaleString()}                    ║`)
   console.log('╚════════════════════════════════════════════════════════════╝')
   console.log('')
+})
+
+// Catch-all route for SPA
+app.get('*', (req, res) => {
+  const indexPath = join(__dirname, '../dist/index.html')
+  const publicIndexPath = join(__dirname, '../public/index.html')
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath)
+  } else if (fs.existsSync(publicIndexPath)) {
+    res.sendFile(publicIndexPath)
+  } else {
+    res.status(404).send('Frontend not built yet')
+  }
 })
 
 // Graceful Shutdown

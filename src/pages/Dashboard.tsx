@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { dashboardApi } from '@/services/localApi';
+import { dashboardApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -114,7 +114,7 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     if (!user) return;
-    const result = await dashboardApi.getStats(user.id);
+    const result = await dashboardApi.getStats();
     if (result.success && result.data) {
       setStats(result.data);
     }

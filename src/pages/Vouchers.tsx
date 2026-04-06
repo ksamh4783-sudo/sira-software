@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { vouchersApi } from '@/services/localApi';
+import { vouchersApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -42,7 +42,7 @@ export default function Vouchers() {
 
   const fetchVouchers = () => {
     if (!user) return;
-    const result = vouchersApi.getAll(user.id);
+    const result = vouchersApi.getAll();
     if (result.success && result.data) {
       setVouchers(result.data);
     }
@@ -52,7 +52,7 @@ export default function Vouchers() {
     e.preventDefault();
     if (!user) return;
 
-    const result = vouchersApi.create(user.id, formData);
+    const result = vouchersApi.create(formData);
     if (result.success) {
       toast.success(`تم إنشاء ${formData.quantity} قسيمة بنجاح`);
       fetchVouchers();
@@ -64,7 +64,7 @@ export default function Vouchers() {
   const handleDelete = (voucher: Voucher) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذه القسيمة؟')) {
-      const result = vouchersApi.delete(user.id, voucher.id);
+      const result = vouchersApi.delete(voucher.id);
       if (result.success) {
         toast.success('تم حذف القسيمة بنجاح');
         fetchVouchers();

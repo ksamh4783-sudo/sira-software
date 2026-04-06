@@ -7,7 +7,9 @@ import type {
   DashboardStats, 
   ActivityLog,
   ApiResponse,
-  User
+  User,
+  FingerprintDevice,
+  DVRCamera
 } from '@/types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -189,6 +191,44 @@ export const hotspotPagesApi = {
     }),
 };
 
+// Fingerprint Devices API
+export const fingerprintApi = {
+  getAll: () => fetchWithAuth<FingerprintDevice[]>('/api/fingerprint'),
+  create: (data: Partial<FingerprintDevice>) => 
+    fetchWithAuth<FingerprintDevice>('/api/fingerprint', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: Partial<FingerprintDevice>) => 
+    fetchWithAuth<FingerprintDevice>(`/api/fingerprint/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) => 
+    fetchWithAuth<null>(`/api/fingerprint/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
+// DVR Cameras API
+export const dvrApi = {
+  getAll: () => fetchWithAuth<DVRCamera[]>('/api/dvr'),
+  create: (data: Partial<DVRCamera>) => 
+    fetchWithAuth<DVRCamera>('/api/dvr', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: Partial<DVRCamera>) => 
+    fetchWithAuth<DVRCamera>(`/api/dvr/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) => 
+    fetchWithAuth<null>(`/api/dvr/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
 // Activity API
 export const activityApi = {
   getAll: () => fetchWithAuth<ActivityLog[]>('/api/activity'),
@@ -207,6 +247,8 @@ export default {
   backgrounds: backgroundsApi,
   printCards: printCardsApi,
   hotspotPages: hotspotPagesApi,
+  fingerprint: fingerprintApi,
+  dvr: dvrApi,
   activity: activityApi,
   health: healthApi,
 };

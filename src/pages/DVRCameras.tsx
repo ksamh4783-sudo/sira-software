@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { dvrApi } from '@/services/localApi';
+import { dvrApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,7 +47,7 @@ export default function DVRCameras() {
 
   const fetchCameras = () => {
     if (!user) return;
-    const result = dvrApi.getAll(user.id);
+    const result = dvrApi.getAll();
     if (result.success && result.data) {
       setCameras(result.data);
     }
@@ -58,7 +58,7 @@ export default function DVRCameras() {
     if (!user) return;
 
     if (editingCamera) {
-      const result = dvrApi.update(user.id, editingCamera.id, formData);
+      const result = dvrApi.update(editingCamera.id, formData);
       if (result.success) {
         toast.success('تم تحديث الكاميرا بنجاح');
         fetchCameras();
@@ -66,7 +66,7 @@ export default function DVRCameras() {
         setEditingCamera(null);
       }
     } else {
-      const result = dvrApi.create(user.id, formData);
+      const result = dvrApi.create(formData);
       if (result.success) {
         toast.success('تم إضافة الكاميرا بنجاح');
         fetchCameras();
@@ -79,7 +79,7 @@ export default function DVRCameras() {
   const handleDelete = (camera: DVRCamera) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذه الكاميرا؟')) {
-      const result = dvrApi.delete(user.id, camera.id);
+      const result = dvrApi.delete(camera.id);
       if (result.success) {
         toast.success('تم حذف الكاميرا بنجاح');
         fetchCameras();

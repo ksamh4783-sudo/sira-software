@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { backgroundsApi } from '@/services/localApi';
+import { backgroundsApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,7 +58,7 @@ export default function Backgrounds() {
 
   const fetchBackgrounds = () => {
     if (!user) return;
-    const result = backgroundsApi.getAll(user.id);
+    const result = backgroundsApi.getAll();
     if (result.success && result.data) {
       setBackgrounds(result.data);
     }
@@ -68,7 +68,7 @@ export default function Backgrounds() {
     e.preventDefault();
     if (!user) return;
 
-    const result = backgroundsApi.create(user.id, formData);
+    const result = backgroundsApi.create(formData);
     if (result.success) {
       toast.success('تم إضافة الخلفية بنجاح');
       fetchBackgrounds();
@@ -80,7 +80,7 @@ export default function Backgrounds() {
   const handleDelete = (background: Background) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذه الخلفية؟')) {
-      const result = backgroundsApi.delete(user.id, background.id);
+      const result = backgroundsApi.delete(background.id);
       if (result.success) {
         toast.success('تم حذف الخلفية بنجاح');
         fetchBackgrounds();
@@ -90,7 +90,7 @@ export default function Backgrounds() {
 
   const handleSetDefault = (background: Background) => {
     if (!user) return;
-    const result = backgroundsApi.update(user.id, background.id, { isDefault: !background.isDefault });
+    const result = backgroundsApi.update(background.id, { isDefault: !background.isDefault });
     if (result.success) {
       toast.success(background.isDefault ? 'تم إلغاء التعيين كافتراضي' : 'تم التعيين كافتراضي');
       fetchBackgrounds();

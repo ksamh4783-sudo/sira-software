@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { User, LoginCredentials, ApiResponse } from '@/types';
-import { authApi } from '@/services/localApi';
+import { authApi } from '@/services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -21,13 +21,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored auth data on mount
-    const currentUser = authApi.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-      setToken('local-token');
-    }
-    setIsLoading(false);
+    const initAuth = async () => {
+      const storedToken = localStorage.getItem('sira_token');
+      const storedUser = localStorage.getItem('sira_user');
+      
+      if (storedToken && storedUser) {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+        
+        // Verify token with backend
+        try {
+          const result = await authApi.me();
+          if (result.success && result.data) {
+            setUser(result.data);
+            localStorage.setItem('sira_user', JSON.stringify(result.data));
+          } else {
+            // Token invalid
+            logout();
+          }
+        } catch (error) {
+          console.error('Auth verification failed', error);
+        }
+      }
+      setIsLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<ApiResponse<{ token: string; user: User }>> => {
@@ -35,8 +54,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await authApi.login(credentials);
 
       if (result.success && result.data) {
-        setToken(result.data.token);
-        setUser(result.data.user);
+        const { token: newToken, user: newUser } = result.data;
+        setToken(newToken);
+        setUser(newUser);
+        localStorage.setItem('sira_token', newToken);
+        localStorage.setItem('sira_user', JSON.stringify(newUser));
       }
 
       return result;
@@ -60,14 +82,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    authApi.logout();
     setToken(null);
     setUser(null);
+    localStorage.removeItem('sira_token');
+    localStorage.removeItem('sira_user');
   };
 
-  const refreshUser = () => {
-    const currentUser = authApi.getCurrentUser();
-    setUser(currentUser);
+  const refreshUser = async () => {
+    try {
+      const result = await authApi.me();
+      if (result.success && result.data) {
+        setUser(result.data);
+        localStorage.setItem('sira_user', JSON.stringify(result.data));
+      }
+    } catch (error) {
+      console.error('Failed to refresh user', error);
+    }
   };
 
   return (

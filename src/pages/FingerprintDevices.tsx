@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { fingerprintApi } from '@/services/localApi';
+import { fingerprintApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,7 +43,7 @@ export default function FingerprintDevices() {
 
   const fetchDevices = () => {
     if (!user) return;
-    const result = fingerprintApi.getAll(user.id);
+    const result = fingerprintApi.getAll();
     if (result.success && result.data) {
       setDevices(result.data);
     }
@@ -54,7 +54,7 @@ export default function FingerprintDevices() {
     if (!user) return;
 
     if (editingDevice) {
-      const result = fingerprintApi.update(user.id, editingDevice.id, formData);
+      const result = fingerprintApi.update(editingDevice.id, formData);
       if (result.success) {
         toast.success('تم تحديث الجهاز بنجاح');
         fetchDevices();
@@ -62,7 +62,7 @@ export default function FingerprintDevices() {
         setEditingDevice(null);
       }
     } else {
-      const result = fingerprintApi.create(user.id, formData);
+      const result = fingerprintApi.create(formData);
       if (result.success) {
         toast.success('تم إضافة الجهاز بنجاح');
         fetchDevices();
@@ -75,7 +75,7 @@ export default function FingerprintDevices() {
   const handleDelete = (device: FingerprintDevice) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذا الجهاز؟')) {
-      const result = fingerprintApi.delete(user.id, device.id);
+      const result = fingerprintApi.delete(device.id);
       if (result.success) {
         toast.success('تم حذف الجهاز بنجاح');
         fetchDevices();

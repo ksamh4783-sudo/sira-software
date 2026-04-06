@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { routersApi } from '@/services/localApi';
+import { routersApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,7 +44,7 @@ export default function Routers() {
 
   const fetchRouters = () => {
     if (!user) return;
-    const result = routersApi.getAll(user.id);
+    const result = routersApi.getAll();
     if (result.success && result.data) {
       setRouters(result.data);
     }
@@ -55,7 +55,7 @@ export default function Routers() {
     if (!user) return;
 
     if (editingRouter) {
-      const result = routersApi.update(user.id, editingRouter.id, formData);
+      const result = routersApi.update(editingRouter.id, formData);
       if (result.success) {
         toast.success('تم تحديث الراوتر بنجاح');
         fetchRouters();
@@ -63,7 +63,7 @@ export default function Routers() {
         setEditingRouter(null);
       }
     } else {
-      const result = routersApi.create(user.id, formData);
+      const result = routersApi.create(formData);
       if (result.success) {
         toast.success('تم إضافة الراوتر بنجاح');
         fetchRouters();
@@ -76,7 +76,7 @@ export default function Routers() {
   const handleDelete = (router: RouterType) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذا الراوتر؟')) {
-      const result = routersApi.delete(user.id, router.id);
+      const result = routersApi.delete(router.id);
       if (result.success) {
         toast.success('تم حذف الراوتر بنجاح');
         fetchRouters();
