@@ -40,19 +40,19 @@ export default function Vouchers() {
     fetchVouchers();
   }, [isAuthenticated, navigate]);
 
-  const fetchVouchers = () => {
+  const fetchVouchers = async () => {
     if (!user) return;
-    const result = vouchersApi.getAll();
+    const result = await vouchersApi.getAll();
     if (result.success && result.data) {
       setVouchers(result.data);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const result = vouchersApi.create(formData);
+    const result = await vouchersApi.create(formData);
     if (result.success) {
       toast.success(`تم إنشاء ${formData.quantity} قسيمة بنجاح`);
       fetchVouchers();
@@ -61,10 +61,10 @@ export default function Vouchers() {
     }
   };
 
-  const handleDelete = (voucher: Voucher) => {
+  const handleDelete = async (voucher: Voucher) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذه القسيمة؟')) {
-      const result = vouchersApi.delete(voucher.id);
+      const result = await vouchersApi.delete(voucher.id);
       if (result.success) {
         toast.success('تم حذف القسيمة بنجاح');
         fetchVouchers();

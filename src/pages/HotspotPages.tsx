@@ -61,19 +61,19 @@ export default function HotspotPages() {
     fetchPages();
   }, [isAuthenticated, navigate]);
 
-  const fetchPages = () => {
+  const fetchPages = async () => {
     if (!user) return;
-    const result = hotspotPagesApi.getAll();
+    const result = await hotspotPagesApi.getAll();
     if (result.success && result.data) {
       setPages(result.data);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const result = hotspotPagesApi.create(formData);
+    const result = await hotspotPagesApi.create(formData);
     if (result.success) {
       toast.success('تم إنشاء صفحة الهوت سبوت بنجاح');
       fetchPages();
@@ -82,10 +82,10 @@ export default function HotspotPages() {
     }
   };
 
-  const handleDelete = (page: HotspotPage) => {
+  const handleDelete = async (page: HotspotPage) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذه الصفحة؟')) {
-      const result = hotspotPagesApi.delete(page.id);
+      const result = await hotspotPagesApi.delete(page.id);
       if (result.success) {
         toast.success('تم حذف الصفحة بنجاح');
         fetchPages();
@@ -93,9 +93,9 @@ export default function HotspotPages() {
     }
   };
 
-  const handleToggleActive = (page: HotspotPage) => {
+  const handleToggleActive = async (page: HotspotPage) => {
     if (!user) return;
-    const result = hotspotPagesApi.update(page.id, { isActive: !page.isActive });
+    const result = await hotspotPagesApi.update(page.id, { isActive: !page.isActive });
     if (result.success) {
       toast.success(page.isActive ? 'تم إلغاء تفعيل الصفحة' : 'تم تفعيل الصفحة');
       fetchPages();

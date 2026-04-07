@@ -1,42 +1,41 @@
-# Sira Software Pro - Full Stack Application
-# Multi-stage build for production
-
 # Stage 1: Build Frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy root package files
 COPY package*.json ./
 RUN npm install
 
-# Copy source and build
+# Copy all source files
 COPY . .
+
+# Build the frontend
 RUN npm run build
 
-# Stage 2: Setup Backend
-FROM node:20-alpine AS backend
+# Stage 2: Production Server
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install backend dependencies (production only)
+# Copy backend package files
 COPY backend/package*.json ./backend/
 WORKDIR /app/backend
-RUN npm install --only=production
+RUN npm install --production
 
-# Copy backend files
+# Copy backend source
 WORKDIR /app
 COPY backend/ ./backend/
 
-# Copy built frontend
-COPY --from=frontend-builder /app/dist ./public
+# Copy built frontend from builder stage
+COPY --from=builder /app/dist ./dist
 
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
 
-# Start command
+# Start the server
 CMD ["node", "backend/server.js"]

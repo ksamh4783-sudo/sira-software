@@ -41,20 +41,20 @@ export default function FingerprintDevices() {
     fetchDevices();
   }, [isAuthenticated, navigate]);
 
-  const fetchDevices = () => {
+  const fetchDevices = async () => {
     if (!user) return;
-    const result = fingerprintApi.getAll();
+    const result = await fingerprintApi.getAll();
     if (result.success && result.data) {
       setDevices(result.data);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     if (editingDevice) {
-      const result = fingerprintApi.update(editingDevice.id, formData);
+      const result = await fingerprintApi.update(editingDevice.id, formData);
       if (result.success) {
         toast.success('تم تحديث الجهاز بنجاح');
         fetchDevices();
@@ -62,7 +62,7 @@ export default function FingerprintDevices() {
         setEditingDevice(null);
       }
     } else {
-      const result = fingerprintApi.create(formData);
+      const result = await fingerprintApi.create(formData);
       if (result.success) {
         toast.success('تم إضافة الجهاز بنجاح');
         fetchDevices();
@@ -72,10 +72,10 @@ export default function FingerprintDevices() {
     }
   };
 
-  const handleDelete = (device: FingerprintDevice) => {
+  const handleDelete = async (device: FingerprintDevice) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذا الجهاز؟')) {
-      const result = fingerprintApi.delete(device.id);
+      const result = await fingerprintApi.delete(device.id);
       if (result.success) {
         toast.success('تم حذف الجهاز بنجاح');
         fetchDevices();
@@ -83,7 +83,7 @@ export default function FingerprintDevices() {
     }
   };
 
-  const handleEdit = (device: FingerprintDevice) => {
+  const handleEdit = async (device: FingerprintDevice) => {
     setEditingDevice(device);
     setFormData({
       name: device.name,

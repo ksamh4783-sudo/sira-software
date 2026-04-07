@@ -64,19 +64,19 @@ export default function PrintCards() {
     fetchCards();
   }, [isAuthenticated, navigate]);
 
-  const fetchCards = () => {
+  const fetchCards = async () => {
     if (!user) return;
-    const result = printCardsApi.getAll();
+    const result = await printCardsApi.getAll();
     if (result.success && result.data) {
       setCards(result.data);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const result = printCardsApi.create(formData);
+    const result = await printCardsApi.create(formData);
     if (result.success) {
       toast.success('تم إنشاء كرت الطباعة بنجاح');
       fetchCards();
@@ -85,10 +85,10 @@ export default function PrintCards() {
     }
   };
 
-  const handleDelete = (card: PrintCard) => {
+  const handleDelete = async (card: PrintCard) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذا الكرت؟')) {
-      const result = printCardsApi.delete(card.id);
+      const result = await printCardsApi.delete(card.id);
       if (result.success) {
         toast.success('تم حذف الكرت بنجاح');
         fetchCards();
@@ -96,13 +96,15 @@ export default function PrintCards() {
     }
   };
 
-  const handlePrint = (card: PrintCard) => {
+  const handlePrint = async (card: PrintCard) => {
     if (!user) return;
-    const result = printCardsApi.print(user.id, card.id);
+    const result = await printCardsApi.print(card.id);
     if (result.success) {
       toast.success('تم تسجيل عملية الطباعة');
       fetchCards();
       setPreviewCard(card);
+    } else {
+      toast.error(result.error || 'حدث خطأ');
     }
   };
 

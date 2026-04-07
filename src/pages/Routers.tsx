@@ -42,44 +42,50 @@ export default function Routers() {
     fetchRouters();
   }, [isAuthenticated, navigate]);
 
-  const fetchRouters = () => {
+  const fetchRouters = async () => {
     if (!user) return;
-    const result = routersApi.getAll();
+    const result = await routersApi.getAll();
     if (result.success && result.data) {
       setRouters(result.data);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     if (editingRouter) {
-      const result = routersApi.update(editingRouter.id, formData);
+      const result = await routersApi.update(editingRouter.id, formData);
       if (result.success) {
         toast.success('تم تحديث الراوتر بنجاح');
         fetchRouters();
         setIsAddDialogOpen(false);
         setEditingRouter(null);
+      } else {
+        toast.error(result.error || 'حدث خطأ');
       }
     } else {
-      const result = routersApi.create(formData);
+      const result = await routersApi.create(formData);
       if (result.success) {
         toast.success('تم إضافة الراوتر بنجاح');
         fetchRouters();
         setIsAddDialogOpen(false);
         resetForm();
+      } else {
+        toast.error(result.error || 'حدث خطأ');
       }
     }
   };
 
-  const handleDelete = (router: RouterType) => {
+  const handleDelete = async (router: RouterType) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذا الراوتر؟')) {
-      const result = routersApi.delete(router.id);
+      const result = await routersApi.delete(router.id);
       if (result.success) {
         toast.success('تم حذف الراوتر بنجاح');
         fetchRouters();
+      } else {
+        toast.error(result.error || 'حدث خطأ');
       }
     }
   };

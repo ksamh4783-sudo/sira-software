@@ -45,20 +45,20 @@ export default function DVRCameras() {
     fetchCameras();
   }, [isAuthenticated, navigate]);
 
-  const fetchCameras = () => {
+  const fetchCameras = async () => {
     if (!user) return;
-    const result = dvrApi.getAll();
+    const result = await dvrApi.getAll();
     if (result.success && result.data) {
       setCameras(result.data);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     if (editingCamera) {
-      const result = dvrApi.update(editingCamera.id, formData);
+      const result = await dvrApi.update(editingCamera.id, formData);
       if (result.success) {
         toast.success('تم تحديث الكاميرا بنجاح');
         fetchCameras();
@@ -66,7 +66,7 @@ export default function DVRCameras() {
         setEditingCamera(null);
       }
     } else {
-      const result = dvrApi.create(formData);
+      const result = await dvrApi.create(formData);
       if (result.success) {
         toast.success('تم إضافة الكاميرا بنجاح');
         fetchCameras();
@@ -76,10 +76,10 @@ export default function DVRCameras() {
     }
   };
 
-  const handleDelete = (camera: DVRCamera) => {
+  const handleDelete = async (camera: DVRCamera) => {
     if (!user) return;
     if (confirm('هل أنت متأكد من حذف هذه الكاميرا؟')) {
-      const result = dvrApi.delete(camera.id);
+      const result = await dvrApi.delete(camera.id);
       if (result.success) {
         toast.success('تم حذف الكاميرا بنجاح');
         fetchCameras();
@@ -87,7 +87,7 @@ export default function DVRCameras() {
     }
   };
 
-  const handleEdit = (camera: DVRCamera) => {
+  const handleEdit = async (camera: DVRCamera) => {
     setEditingCamera(camera);
     setFormData({
       name: camera.name,
