@@ -10,7 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
   Camera, Plus, Search, Edit2, Trash2, Power, 
-  MapPin, Video, ArrowRight, Menu, Eye, EyeOff
+  MapPin, Video, ArrowRight, Menu, Eye, EyeOff,
+  Play, Square, Settings, RotateCcw, Download,
+  Film, Radio, Wifi, WifiOff, AlertCircle,
+  Maximize2, Minimize2, Move, ZoomIn, ZoomOut
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DVRCamera } from '@/types';
@@ -24,18 +27,49 @@ export default function DVRCameras() {
   const [editingCamera, setEditingCamera] = useState<DVRCamera | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [cameraStats, setCameraStats] = useState<any>(null);
+  const [selectedCamera, setSelectedCamera] = useState<DVRCamera | null>(null);
+  const [isStreamDialogOpen, setIsStreamDialogOpen] = useState(false);
+  const [streamUrl, setStreamUrl] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTasks, setRecordingTasks] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     name: '',
     ipAddress: '',
     port: 80,
-    model: '',
+    rtspPort: 554,
+    httpPort: 80,
+    sdkPort: 8000,
+    model: 'Hikvision DS-7200',
     channel: 1,
     username: 'admin',
     password: '',
     location: '',
-    streamUrl: ''
+    streamUrl: '',
+    brand: 'hikvision',
+    ptzEnabled: false,
+    isMotionDetection: false,
+    isRecording: false,
+    videoQuality: 'HD',
+    frameRate: 25,
+    bitRate: 2048
   });
+
+  const cameraBrands = [
+    { value: 'hikvision', label: 'Hikvision' },
+    { value: 'dahua', label: 'Dahua' },
+    { value: 'axis', label: 'Axis' },
+    { value: 'foscam', label: 'Foscam' },
+    { value: 'onvif', label: 'ONVIF Compatible' }
+  ];
+
+  const videoQualities = [
+    { value: 'SD', label: 'Standard Quality (480p)' },
+    { value: 'HD', label: 'High Quality (720p)' },
+    { value: 'FHD', label: 'Full HD (1080p)' },
+    { value: '4K', label: 'Ultra HD (4K)' }
+  ];
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -43,6 +77,7 @@ export default function DVRCameras() {
       return;
     }
     fetchCameras();
+    fetchCameraStats();
   }, [isAuthenticated, navigate]);
 
   const fetchCameras = async () => {
@@ -53,12 +88,180 @@ export default function DVRCameras() {
     }
   };
 
+  const fetchCameraStats = async () => {
+    if (!user) return;
+    const result = await dvrApi.getStats();
+    if (result.success && result.data) {
+      setCameraStats(result.data);
+    }
+  };
+
+  const testConnection = async () => {
+    if (!formData.ipAddress) {
+      toast.error('من فضلك أدخل عنوان IP للكاميرا');
+      return;
+    }
+
+    try {
+      const result = await fetch('/api/dvr/test-connection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          ipAddress: formData.ipAddress,
+          port: formData.port,
+          username: formData.username,
+          password: formData.password,
+          model: formData.model
+        })
+      });
+
+      const data = await result.json();
+      
+      if (data.success) {
+        toast.success('تم الاتصال بالكاميرا بنجاح!');
+        setFormData(prev => ({ ...prev, status: 'online' }));
+      } else {
+        toast.error('فشل الاتصال بالكاميرا: ' + (data.error || 'تحقق من الإعدادات'));
+      }
+    } catch (error) {
+      toast.error('خطأ في اختبار الاتصال: ' + error.message);
+    }
+  };
+
+  const getStreamUrl = async (camera: DVRCamera, channel = 1, quality = 'main') => {
+    try {
+      const result = await fetch('/api/dvr/stream-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          cameraId: camera.id,
+          channel,
+          quality
+        })
+      });
+
+      const data = await result.json();
+      
+      if (data.success) {
+        return data.data.streamUrl;
+      } else {
+        toast.error('فشل الحصول على رابط البث');
+        return '';
+      }
+    } catch (error) {
+      toast.error('خطأ في الحصول على رابط البث: ' + error.message);
+      return '';
+    }
+  };
+
+  const handleStream = async (camera: DVRCamera) => {
+    setSelectedCamera(camera);
+    const url = await getStreamUrl(camera);
+    setStreamUrl(url);
+    setIsStreamDialogOpen(true);
+  };
+
+  const handlePTZ = async (command: string, value = 0) => {
+    if (!selectedCamera) return;
+
+    try {
+      const result = await fetch('/api/dvr/ptz-control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          cameraId: selectedCamera.id,
+          command,
+          value
+        })
+      });
+
+      const data = await result.json();
+      
+      if (data.success) {
+        toast.success(`تم تنفيذ أمر ${command} بنجاح`);
+      } else {
+        toast.error('فشل تنفيذ أمر PTZ: ' + (data.error || 'غير معروف'));
+      }
+    } catch (error) {
+      toast.error('خطأ في التحكم PTZ: ' + error.message);
+    }
+  };
+
+  const startRecording = async (camera: DVRCamera) => {
+    try {
+      const result = await fetch('/api/dvr/start-recording', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          cameraId: camera.id,
+          duration: 3600 // 1 hour
+        })
+      });
+
+      const data = await result.json();
+      
+      if (data.success) {
+        setIsRecording(true);
+        toast.success('تم بدء التسجيل بنجاح');
+      } else {
+        toast.error('فشل بدء التسجيل: ' + (data.error || 'غير معروف'));
+      }
+    } catch (error) {
+      toast.error('خطأ في بدء التسجيل: ' + error.message);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (recordingTasks.length === 0) return;
+
+    try {
+      const result = await fetch('/api/dvr/stop-recording', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          recordingId: recordingTasks[0].id
+        })
+      });
+
+      const data = await result.json();
+      
+      if (data.success) {
+        setIsRecording(false);
+        toast.success('تم إيقاف التسجيل بنجاح');
+      } else {
+        toast.error('فشل إيقاف التسجيل: ' + (data.error || 'غير معروف'));
+      }
+    } catch (error) {
+      toast.error('خطأ في إيقاف التسجيل: ' + error.message);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
+    const cameraData = {
+      ...formData,
+      brand: cameraBrands.find(b => formData.model.toLowerCase().includes(b.value))?.value || 'onvif'
+    };
+
     if (editingCamera) {
-      const result = await dvrApi.update(editingCamera.id, formData);
+      const result = await dvrApi.update(editingCamera.id, cameraData);
       if (result.success) {
         toast.success('تم تحديث الكاميرا بنجاح');
         fetchCameras();
@@ -66,10 +269,11 @@ export default function DVRCameras() {
         setEditingCamera(null);
       }
     } else {
-      const result = await dvrApi.create(formData);
+      const result = await dvrApi.create(cameraData);
       if (result.success) {
         toast.success('تم إضافة الكاميرا بنجاح');
         fetchCameras();
+        fetchCameraStats();
         setIsAddDialogOpen(false);
         resetForm();
       }
@@ -83,6 +287,7 @@ export default function DVRCameras() {
       if (result.success) {
         toast.success('تم حذف الكاميرا بنجاح');
         fetchCameras();
+        fetchCameraStats();
       }
     }
   };
@@ -93,12 +298,22 @@ export default function DVRCameras() {
       name: camera.name,
       ipAddress: camera.ipAddress,
       port: camera.port,
+      rtspPort: camera.rtspPort || 554,
+      httpPort: camera.httpPort || 80,
+      sdkPort: camera.sdkPort || 8000,
       model: camera.model,
       channel: camera.channel,
       username: camera.username,
       password: camera.password,
       location: camera.location || '',
-      streamUrl: camera.streamUrl || ''
+      streamUrl: camera.streamUrl || '',
+      brand: camera.brand || 'hikvision',
+      ptzEnabled: camera.ptzEnabled || false,
+      isMotionDetection: camera.isMotionDetection || false,
+      isRecording: camera.isRecording || false,
+      videoQuality: camera.videoQuality || 'HD',
+      frameRate: camera.frameRate || 25,
+      bitRate: camera.bitRate || 2048
     });
     setIsAddDialogOpen(true);
   };
@@ -108,19 +323,30 @@ export default function DVRCameras() {
       name: '',
       ipAddress: '',
       port: 80,
-      model: '',
+      rtspPort: 554,
+      httpPort: 80,
+      sdkPort: 8000,
+      model: 'Hikvision DS-7200',
       channel: 1,
       username: 'admin',
       password: '',
       location: '',
-      streamUrl: ''
+      streamUrl: '',
+      brand: 'hikvision',
+      ptzEnabled: false,
+      isMotionDetection: false,
+      isRecording: false,
+      videoQuality: 'HD',
+      frameRate: 25,
+      bitRate: 2048
     });
   };
 
   const filteredCameras = cameras.filter(camera =>
     camera.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     camera.ipAddress.includes(searchQuery) ||
-    camera.location?.toLowerCase().includes(searchQuery.toLowerCase())
+    camera.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    camera.model?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const navItems = [
@@ -135,7 +361,7 @@ export default function DVRCameras() {
         <div className="h-full flex flex-col">
           <div className="p-6 border-b">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <Camera className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -152,7 +378,7 @@ export default function DVRCameras() {
                 onClick={() => navigate(item.path)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   item.active 
-                    ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg' 
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg' 
                     : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
                 }`}
               >
@@ -181,21 +407,32 @@ export default function DVRCameras() {
                   إضافة كاميرا
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{editingCamera ? 'تعديل كاميرا' : 'إضافة كاميرا DVR جديدة'}</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                  <div>
-                    <Label>اسم الكاميرا</Label>
-                    <Input 
-                      value={formData.name} 
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      placeholder="مثال: كاميرا المدخل الرئيسي"
-                      required
-                    />
-                  </div>
+                <form onSubmit={handleSubmit} className="space-y-6 mt-4">
                   <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>اسم الكاميرا</Label>
+                      <Input 
+                        value={formData.name} 
+                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                        placeholder="مثال: كاميرا المدخل الرئيسي"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label>الموديل</Label>
+                      <Input 
+                        value={formData.model} 
+                        onChange={(e) => setFormData({...formData, model: e.target.value})}
+                        placeholder="مثال: Hikvision DS-7200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-4">
                     <div>
                       <Label>عنوان IP</Label>
                       <Input 
@@ -206,22 +443,20 @@ export default function DVRCameras() {
                       />
                     </div>
                     <div>
-                      <Label>المنفذ</Label>
+                      <Label>المنفذ HTTP</Label>
                       <Input 
                         type="number"
-                        value={formData.port} 
-                        onChange={(e) => setFormData({...formData, port: parseInt(e.target.value)})}
+                        value={formData.httpPort} 
+                        onChange={(e) => setFormData({...formData, httpPort: parseInt(e.target.value)})}
                         required
                       />
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>الموديل</Label>
+                      <Label>منفذ RTSP</Label>
                       <Input 
-                        value={formData.model} 
-                        onChange={(e) => setFormData({...formData, model: e.target.value})}
-                        placeholder="مثال: Hikvision DS-7200"
+                        type="number"
+                        value={formData.rtspPort} 
+                        onChange={(e) => setFormData({...formData, rtspPort: parseInt(e.target.value)})}
                       />
                     </div>
                     <div>
@@ -234,6 +469,7 @@ export default function DVRCameras() {
                       />
                     </div>
                   </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>اسم المستخدم</Label>
@@ -263,6 +499,7 @@ export default function DVRCameras() {
                       </div>
                     </div>
                   </div>
+
                   <div>
                     <Label>الموقع</Label>
                     <Input 
@@ -271,17 +508,78 @@ export default function DVRCameras() {
                       placeholder="مثال: المدخل الأمامي"
                     />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>جودة الفيديو</Label>
+                      <select
+                        value={formData.videoQuality}
+                        onChange={(e) => setFormData({...formData, videoQuality: e.target.value})}
+                        className="w-full p-2 border rounded-md"
+                      >
+                        {videoQualities.map(quality => (
+                          <option key={quality.value} value={quality.value}>{quality.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label>معدل الإطارات</Label>
+                      <Input 
+                        type="number"
+                        value={formData.frameRate} 
+                        onChange={(e) => setFormData({...formData, frameRate: parseInt(e.target.value)})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="ptzEnabled"
+                        checked={formData.ptzEnabled}
+                        onChange={(e) => setFormData({...formData, ptzEnabled: e.target.checked})}
+                      />
+                      <Label htmlFor="ptzEnabled">تمكين PTZ</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="isMotionDetection"
+                        checked={formData.isMotionDetection}
+                        onChange={(e) => setFormData({...formData, isMotionDetection: e.target.checked})}
+                      />
+                      <Label htmlFor="isMotionDetection">كشف الحركة</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="isRecording"
+                        checked={formData.isRecording}
+                        onChange={(e) => setFormData({...formData, isRecording: e.target.checked})}
+                      />
+                      <Label htmlFor="isRecording">تسجيل تلقائي</Label>
+                    </div>
+                  </div>
+
                   <div>
                     <Label>رابط البث (Stream URL)</Label>
                     <Input 
                       value={formData.streamUrl} 
                       onChange={(e) => setFormData({...formData, streamUrl: e.target.value})}
-                      placeholder="rtsp://..."
+                      placeholder="rtsp://... (اختياري)"
                     />
                   </div>
-                  <Button type="submit" className="w-full">
-                    {editingCamera ? 'تحديث' : 'إضافة'}
-                  </Button>
+
+                  <div className="flex gap-2">
+                    <Button type="submit" className="flex-1">
+                      {editingCamera ? 'تحديث' : 'إضافة'}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={testConnection}>
+                      <Radio className="w-4 h-4 ml-2" />
+                      اختبار الاتصال
+                    </Button>
+                  </div>
                 </form>
               </DialogContent>
             </Dialog>
@@ -290,52 +588,65 @@ export default function DVRCameras() {
 
         <div className="p-6 space-y-6">
           {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                  <Camera className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">إجمالي الكاميرات</p>
-                  <p className="text-2xl font-bold">{cameras.length}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                  <Power className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">الكاميرات المتصلة</p>
-                  <p className="text-2xl font-bold">{cameras.filter(c => c.status === 'online').length}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                  <Video className="w-6 h-6 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">إجمالي القنوات</p>
-                  <p className="text-2xl font-bold">{cameras.reduce((sum, c) => sum + c.channel, 0)}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
-                  <MapPin className="w-6 h-6 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">المواقع</p>
-                  <p className="text-2xl font-bold">{new Set(cameras.map(c => c.location).filter(Boolean)).size}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {cameraStats && (
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <Card>
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <Camera className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">إجمالي الكاميرات</p>
+                    <p className="text-2xl font-bold">{cameraStats.total}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                    <Wifi className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">متصلة</p>
+                    <p className="text-2xl font-bold">{cameraStats.online}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+                    <WifiOff className="w-6 h-6 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">غير متصلة</p>
+                    <p className="text-2xl font-bold">{cameraStats.offline}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+                    <Film className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">قيد التسجيل</p>
+                    <p className="text-2xl font-bold">{cameraStats.recording}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
+                    <Video className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">نسبة الاتصال</p>
+                    <p className="text-2xl font-bold">{cameraStats.onlinePercentage}%</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Search */}
           <div className="relative">
@@ -349,7 +660,7 @@ export default function DVRCameras() {
           </div>
 
           {/* Cameras Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredCameras.map((camera) => (
               <Card key={camera.id} className="card-hover">
                 <CardHeader className="pb-3">
@@ -358,9 +669,11 @@ export default function DVRCameras() {
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                         camera.status === 'online' ? 'bg-green-100' : 'bg-red-100'
                       }`}>
-                        <Camera className={`w-5 h-5 ${
-                          camera.status === 'online' ? 'text-green-600' : 'text-red-600'
-                        }`} />
+                        {camera.status === 'online' ? (
+                          <Wifi className={`w-5 h-5 text-green-600`} />
+                        ) : (
+                          <WifiOff className={`w-5 h-5 text-red-600`} />
+                        )}
                       </div>
                       <div>
                         <CardTitle className="text-base">{camera.name}</CardTitle>
@@ -370,6 +683,9 @@ export default function DVRCameras() {
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleStream(camera)}>
+                        <Play className="w-4 h-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(camera)}>
                         <Edit2 className="w-4 h-4" />
                       </Button>
@@ -382,7 +698,7 @@ export default function DVRCameras() {
                 <CardContent className="pt-0">
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2 text-gray-600">
-                      <Power className="w-4 h-4" />
+                      <Radio className="w-4 h-4" />
                       <span>{camera.ipAddress}:{camera.port}</span>
                     </div>
                     {camera.model && (
@@ -401,11 +717,44 @@ export default function DVRCameras() {
                         <span>{camera.location}</span>
                       </div>
                     )}
-                    {camera.streamUrl && (
+                    {camera.videoQuality && (
                       <div className="flex items-center gap-2 text-gray-600">
-                        <Eye className="w-4 h-4" />
-                        <span className="truncate">{camera.streamUrl}</span>
+                        <Settings className="w-4 h-4" />
+                        <span>{camera.videoQuality} - {camera.frameRate}fps</span>
                       </div>
+                    )}
+                    {camera.ptzEnabled && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <Move className="w-4 h-4" />
+                        <span>PTZ مُمَكَّن</span>
+                      </div>
+                    )}
+                    {camera.isRecording && (
+                      <div className="flex items-center gap-2 text-red-600">
+                        <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
+                        <span>قيد التسجيل</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="mt-4 flex gap-2">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => handleStream(camera)}
+                      className="flex-1"
+                    >
+                      <Play className="w-3 h-3 ml-1" />
+                      مشاهدة
+                    </Button>
+                    {camera.ptzEnabled && (
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => { setSelectedCamera(camera); setIsStreamDialogOpen(true); }}
+                      >
+                        <Settings className="w-3 h-3" />
+                      </Button>
                     )}
                   </div>
                 </CardContent>
@@ -422,6 +771,100 @@ export default function DVRCameras() {
           )}
         </div>
       </main>
+
+      {/* Stream Dialog */}
+      <Dialog open={isStreamDialogOpen} onOpenChange={setIsStreamDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>مشاهدة البث المباشر - {selectedCamera?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {streamUrl ? (
+              <div className="relative">
+                <video
+                  src={streamUrl}
+                  controls
+                  autoPlay
+                  className="w-full h-64 bg-black rounded-lg"
+                  onError={() => toast.error('فشل تحميل البث')}
+                />
+                {selectedCamera?.ptzEnabled && (
+                  <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+                    <div className="flex gap-1">
+                      <Button size="sm" onClick={() => handlePTZ('up')}>
+                        <Move className="w-4 h-4 rotate-0" />
+                      </Button>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="sm" onClick={() => handlePTZ('left')}>
+                        <Move className="w-4 h-4 rotate-90" />
+                      </Button>
+                      <Button size="sm" onClick={() => handlePTZ('stop')}>
+                        <Square className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" onClick={() => handlePTZ('right')}>
+                        <Move className="w-4 h-4 -rotate-90" />
+                      </Button>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="sm" onClick={() => handlePTZ('down')}>
+                        <Move className="w-4 h-4 rotate-180" />
+                      </Button>
+                    </div>
+                    <div className="flex gap-1 mt-2">
+                      <Button size="sm" onClick={() => handlePTZ('zoomin')}>
+                        <ZoomIn className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" onClick={() => handlePTZ('zoomout')}>
+                        <ZoomOut className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="w-full h-64 bg-gray-900 rounded-lg flex items-center justify-center">
+                <div className="text-center text-white">
+                  <Video className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>جاري تحميل البث...</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-between items-center">
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant={isRecording ? "destructive" : "default"}
+                  onClick={isRecording ? stopRecording : () => startRecording(selectedCamera!)}
+                >
+                  {isRecording ? (
+                    <><Square className="w-4 h-4 ml-1" /> إيقاف التسجيل</>
+                  ) : (
+                    <><Play className="w-4 h-4 ml-1" /> تسجيل</>
+                  )}
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => setStreamUrl('')}
+                >
+                  <RotateCcw className="w-4 h-4 ml-1" />
+                  إعادة تحميل
+                </Button>
+              </div>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => window.open(streamUrl, '_blank')}
+              >
+                <Download className="w-4 h-4 ml-1" />
+                فتح في نافذة جديدة
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

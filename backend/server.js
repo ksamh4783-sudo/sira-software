@@ -6,7 +6,10 @@ import fs from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
-import { RouterOSAPI } from 'node-routeros' // ← تم التحديث للمكتبة الصحيحة هنا
+import { RouterOSAPI } from 'node-routeros'
+import MikroTikManager from './mikrotik-api.js'
+import FingerprintManager from './fingerprint-api.js'
+import DVRManager from './dvr-api.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -873,6 +876,119 @@ app.delete('/api/hotspot-pages/:id', authenticateToken, async (req, res) => {
   }
 })
 
+// ==================== MIKROTIK LIVE STATS ====================
+
+app.post('/api/routers/live-stats', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password } = req.body
+    
+    if (!ipAddress || !username) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Router IP address and username are required' 
+      })
+    }
+    
+    console.log(`📡 Fetching live stats from MikroTik: ${ipAddress}:${port || 8728}`)
+    
+    // Use MikroTik Manager to get live statistics
+    const result = await MikroTikManager.getLiveStats(
+      ipAddress,
+      username,
+      password || '',
+      port || 8728
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully fetched stats from ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to fetch stats from ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error fetching MikroTik stats:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Test MikroTik connection
+app.post('/api/routers/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password } = req.body
+    
+    if (!ipAddress || !username) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Router IP address and username are required' 
+      })
+    }
+    
+    console.log(`🧪 Testing connection to MikroTik: ${ipAddress}:${port || 8728}`)
+    
+    const result = await MikroTikManager.testConnection(
+      ipAddress,
+      username,
+      password || '',
+      port || 8728
+    )
+    
+    if (result.success) {
+      console.log(`✅ Connection test successful for ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Connection test failed for ${ipAddress}:`, result.error)
+      res.status(400).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error testing MikroTik connection:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get router system information
+app.post('/api/routers/system-info', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password } = req.body
+    
+    if (!ipAddress || !username) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Router IP address and username are required' 
+      })
+    }
+    
+    console.log(`ℹ️  Fetching system info from MikroTik: ${ipAddress}:${port || 8728}`)
+    
+    const result = await MikroTikManager.getSystemInfo(
+      ipAddress,
+      username,
+      password || '',
+      port || 8728
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully fetched system info from ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to fetch system info from ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error fetching MikroTik system info:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
 // ==================== FINGERPRINT DEVICES ====================
 
 app.get('/api/fingerprint', authenticateToken, (req, res) => {
@@ -901,6 +1017,179 @@ app.post('/api/fingerprint', authenticateToken, async (req, res) => {
     res.json({ success: true, data: device })
   } catch (error) {
     res.status(500).json({ error: 'Failed to create device', success: false })
+  }
+})
+
+// ==================== FINGERPRINT DEVICES ====================
+
+app.get('/api/fingerprint', authenticateToken, (req, res) => {
+  const userDevices = db.fingerprintDevices.filter(d => d.companyId === req.user.id)
+  res.json({ success: true, data: userDevices })
+})
+
+app.post('/api/fingerprint', authenticateToken, async (req, res) => {
+  try {
+    const { name, ipAddress, port, model, serialNumber, location } = req.body
+    const device = {
+      id: uuidv4(),
+      name,
+      ipAddress,
+      port: port || 4370,
+      status: 'offline',
+      model,
+      serialNumber,
+      location,
+      totalUsers: 0,
+      companyId: req.user.id,
+      createdAt: new Date().toISOString()
+    }
+    db.fingerprintDevices.push(device)
+    saveDB()
+    res.json({ success: true, data: device })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create device', success: false })
+  }
+})
+
+// Test fingerprint device connection
+app.post('/api/fingerprint/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Device IP address is required' 
+      })
+    }
+    
+    console.log(`🧪 Testing connection to fingerprint device: ${ipAddress}:${port || 4370}`)
+    
+    const result = await FingerprintManager.testConnection(
+      ipAddress,
+      port || 4370
+    )
+    
+    if (result.success) {
+      console.log(`✅ Connection test successful for fingerprint device ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Connection test failed for fingerprint device ${ipAddress}:`, result.error)
+      res.status(400).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error testing fingerprint connection:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get fingerprint device info
+app.post('/api/fingerprint/device-info', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Device IP address is required' 
+      })
+    }
+    
+    console.log(`ℹ️  Fetching device info from fingerprint device: ${ipAddress}:${port || 4370}`)
+    
+    const result = await FingerprintManager.getDeviceInfo(
+      ipAddress,
+      port || 4370
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully fetched device info from ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to fetch device info from ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error fetching fingerprint device info:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get fingerprint device users
+app.post('/api/fingerprint/users', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Device IP address is required' 
+      })
+    }
+    
+    console.log(`👥 Fetching users from fingerprint device: ${ipAddress}:${port || 4370}`)
+    
+    const result = await FingerprintManager.getUsers(
+      ipAddress,
+      port || 4370
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully fetched users from ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to fetch users from ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error fetching fingerprint users:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get fingerprint attendance records
+app.post('/api/fingerprint/attendance', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, startDate, endDate } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Device IP address is required' 
+      })
+    }
+    
+    console.log(`📋 Fetching attendance from fingerprint device: ${ipAddress}:${port || 4370}`)
+    
+    const result = await FingerprintManager.getAttendance(
+      ipAddress,
+      port || 4370,
+      startDate,
+      endDate
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully fetched attendance from ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to fetch attendance from ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error fetching fingerprint attendance:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
   }
 })
 
@@ -963,6 +1252,459 @@ app.post('/api/dvr', authenticateToken, async (req, res) => {
   }
 })
 
+// ==================== DVR CAMERAS ====================
+
+app.get('/api/dvr', authenticateToken, (req, res) => {
+  const userCameras = db.dvrCameras.filter(c => c.companyId === req.user.id)
+  res.json({ success: true, data: userCameras })
+})
+
+app.post('/api/dvr', authenticateToken, async (req, res) => {
+  try {
+    const { name, ipAddress, port, model, channel, username, password, location, streamUrl } = req.body
+    const camera = {
+      id: uuidv4(),
+      name,
+      ipAddress,
+      port: port || 80,
+      status: 'offline',
+      model,
+      channel: channel || 1,
+      username: username || 'admin',
+      password,
+      location,
+      streamUrl,
+      companyId: req.user.id,
+      createdAt: new Date().toISOString()
+    }
+    db.dvrCameras.push(camera)
+    saveDB()
+    res.json({ success: true, data: camera })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create camera', success: false })
+  }
+})
+
+// Test DVR camera connection
+app.post('/api/dvr/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password, model } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Camera IP address is required' 
+      })
+    }
+    
+    // Test connection using DVRManager
+    const testResult = await dvrManager.testConnection({
+      ipAddress,
+      port: port || 80,
+      username: username || 'admin',
+      password,
+      model: model || 'Hikvision'
+    })
+    
+    if (testResult) {
+      res.json({ 
+        success: true, 
+        message: 'Connection successful',
+        data: { status: 'online' }
+      })
+    } else {
+      res.json({ 
+        success: false, 
+        error: 'Connection failed - Check IP, port, username and password',
+        data: { status: 'offline' }
+      })
+    }
+    
+  } catch (error) {
+    console.error('DVR connection test error:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: 'Connection test failed: ' + error.message 
+    })
+  }
+})
+
+// Get camera stream URL
+app.post('/api/dvr/stream-url', authenticateToken, (req, res) => {
+  try {
+    const { cameraId, channel, quality } = req.body
+    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
+    
+    if (!camera) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Camera not found' 
+      })
+    }
+    
+    const streamUrl = dvrManager.getStreamUrl(camera, channel || 1, quality || 'main')
+    
+    res.json({ 
+      success: true, 
+      data: { streamUrl }
+    })
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get stream URL: ' + error.message 
+    })
+  }
+})
+
+// Control PTZ (Pan, Tilt, Zoom)
+app.post('/api/dvr/ptz-control', authenticateToken, async (req, res) => {
+  try {
+    const { cameraId, command, value } = req.body
+    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
+    
+    if (!camera) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Camera not found' 
+      })
+    }
+    
+    const result = await dvrManager.controlPTZ(cameraId, command, value)
+    
+    if (result.success) {
+      res.json(result)
+    } else {
+      res.status(400).json(result)
+    }
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'PTZ control failed: ' + error.message 
+    })
+  }
+})
+
+// Start recording
+app.post('/api/dvr/start-recording', authenticateToken, async (req, res) => {
+  try {
+    const { cameraId, duration } = req.body
+    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
+    
+    if (!camera) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Camera not found' 
+      })
+    }
+    
+    const result = await dvrManager.startRecording(cameraId, duration || 3600)
+    res.json(result)
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to start recording: ' + error.message 
+    })
+  }
+})
+
+// Stop recording
+app.post('/api/dvr/stop-recording', authenticateToken, async (req, res) => {
+  try {
+    const { recordingId } = req.body
+    const result = await dvrManager.stopRecording(recordingId)
+    res.json(result)
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to stop recording: ' + error.message 
+    })
+  }
+})
+
+// Get camera statistics
+app.get('/api/dvr/stats', authenticateToken, (req, res) => {
+  try {
+    const userCameras = db.dvrCameras.filter(c => c.companyId === req.user.id)
+    const stats = {
+      total: userCameras.length,
+      online: userCameras.filter(c => c.status === 'online').length,
+      offline: userCameras.filter(c => c.status === 'offline').length,
+      recording: userCameras.filter(c => c.isRecording).length
+    }
+    
+    stats.onlinePercentage = stats.total > 0 ? Math.round((stats.online / stats.total) * 100) : 0
+    
+    res.json({ 
+      success: true, 
+      data: stats 
+    })
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get stats: ' + error.message 
+    })
+  }
+})
+    
+    console.log(`🧪 Testing connection to DVR camera: ${ipAddress}:${port || 80}`)
+    
+    const result = await DVRManager.testConnection(
+      ipAddress,
+      port || 80,
+      username || 'admin',
+      password || ''
+    )
+    
+    if (result.success) {
+      console.log(`✅ Connection test successful for DVR camera ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Connection test failed for DVR camera ${ipAddress}:`, result.error)
+      res.status(400).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error testing DVR connection:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get DVR camera info
+app.post('/api/dvr/device-info', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Camera IP address is required' 
+      })
+    }
+    
+    console.log(`ℹ️  Fetching device info from DVR camera: ${ipAddress}:${port || 80}`)
+    
+    const result = await DVRManager.getDeviceInfo(
+      ipAddress,
+      port || 80,
+      username || 'admin',
+      password || ''
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully fetched device info from DVR camera ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to fetch device info from DVR camera ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error fetching DVR device info:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get DVR camera stream URL
+app.post('/api/dvr/stream-url', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password, channel, protocol } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Camera IP address is required' 
+      })
+    }
+    
+    console.log(`📹 Generating stream URL for DVR camera: ${ipAddress}:${port || 80}`)
+    
+    const result = await DVRManager.getStreamUrl(
+      ipAddress,
+      port || 80,
+      username || 'admin',
+      password || '',
+      channel || 1,
+      protocol || 'rtsp'
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully generated stream URL for DVR camera ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to generate stream URL for DVR camera ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error generating DVR stream URL:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get DVR camera snapshot
+app.post('/api/dvr/snapshot', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password, channel } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Camera IP address is required' 
+      })
+    }
+    
+    console.log(`📸 Getting snapshot from DVR camera: ${ipAddress}:${port || 80}`)
+    
+    const result = await DVRManager.getSnapshot(
+      ipAddress,
+      port || 80,
+      username || 'admin',
+      password || '',
+      channel || 1
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully got snapshot from DVR camera ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to get snapshot from DVR camera ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error getting DVR snapshot:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Control camera PTZ
+app.post('/api/dvr/ptz-control', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password, channel, command } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Camera IP address is required' 
+      })
+    }
+    
+    console.log(`🎮 Controlling PTZ for DVR camera: ${ipAddress}:${port || 80}, Command: ${command || 'home'}`)
+    
+    const result = await DVRManager.controlPtz(
+      ipAddress,
+      port || 80,
+      username || 'admin',
+      password || '',
+      channel || 1,
+      command || 'home'
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully controlled PTZ for DVR camera ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to control PTZ for DVR camera ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error controlling DVR PTZ:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get motion detection status
+app.post('/api/dvr/motion-status', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password, channel } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Camera IP address is required' 
+      })
+    }
+    
+    console.log(`🚨 Getting motion status for DVR camera: ${ipAddress}:${port || 80}`)
+    
+    const result = await DVRManager.getMotionStatus(
+      ipAddress,
+      port || 80,
+      username || 'admin',
+      password || '',
+      channel || 1
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully got motion status for DVR camera ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to get motion status for DVR camera ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error getting DVR motion status:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
+// Get device logs
+app.post('/api/dvr/device-logs', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password, limit } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Camera IP address is required' 
+      })
+    }
+    
+    console.log(`📋 Getting device logs for DVR camera: ${ipAddress}:${port || 80}`)
+    
+    const result = await DVRManager.getDeviceLogs(
+      ipAddress,
+      port || 80,
+      username || 'admin',
+      password || '',
+      limit || 50
+    )
+    
+    if (result.success) {
+      console.log(`✅ Successfully got device logs for DVR camera ${ipAddress}`)
+      res.json(result)
+    } else {
+      console.error(`❌ Failed to get device logs for DVR camera ${ipAddress}:`, result.error)
+      res.status(500).json(result)
+    }
+  } catch (error) {
+    console.error('❌ Error getting DVR device logs:', error)
+    res.status(500).json({ 
+      success: false, 
+      error: `Server error: ${error.message}` 
+    })
+  }
+})
+
 app.put('/api/dvr/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -987,6 +1729,22 @@ app.delete('/api/dvr/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete camera', success: false })
   }
+})
+
+// ==================== HEALTH CHECK ====================
+
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Sira Software Pro API is running',
+    timestamp: new Date().toISOString(),
+    version: '2.0.0',
+    services: {
+      mikrotik: 'enabled',
+      fingerprint: 'enabled',
+      database: 'connected'
+    }
+  })
 })
 
 // ==================== ACTIVITY LOGS ====================
