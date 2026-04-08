@@ -10,6 +10,7 @@ import DVRCameras from '@/pages/DVRCameras';
 import Backgrounds from '@/pages/Backgrounds';
 import PrintCards from '@/pages/PrintCards';
 import HotspotPages from '@/pages/HotspotPages';
+import CreateCards from '@/pages/CreateCards'; // <-- تم إضافة استيراد الصفحة الجديدة هنا
 import './App.css';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
           <Route path="/backgrounds" element={<Backgrounds />} />
           <Route path="/print-cards" element={<PrintCards />} />
           <Route path="/hotspot-pages" element={<HotspotPages />} />
+          <Route path="/create-cards" element={<CreateCards />} /> {/* <-- تم إضافة المسار الجديد هنا */}
         </Routes>
       </BrowserRouter>
       <Toaster position="top-center" richColors />
