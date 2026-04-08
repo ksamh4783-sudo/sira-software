@@ -273,7 +273,7 @@ export default function Login() {
             </CardContent>
           </Card>
 
-          <div className="mt-8 flex justify-center gap-6">
+         <div className="mt-8 flex justify-center gap-6">
             {[{ icon: Lock, label: 'AES-256' }, { icon: Shield, label: 'آمن 100%' }, { icon: Headphones, label: 'دعم 24/7' }].map((item, idx) => (
               <div key={idx} className="flex flex-col items-center gap-2 text-gray-400">
                 <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center"><item.icon className="w-5 h-5" /></div>
@@ -282,8 +282,6 @@ export default function Login() {
             ))}
           </div>
 
-              </div>
-          </div>
         </div>
       </div>
     </div>
