@@ -25,8 +25,10 @@ export default function Routers() {
   const [editingRouter, setEditingRouter] = useState<RouterType | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  // حالة نافذة الاتصال السريع المضافة حديثاً
+  // حالات نافذة الاتصال المباشر والبيانات الحية
   const [quickConnectRouter, setQuickConnectRouter] = useState<RouterType | null>(null);
+  const [liveStats, setLiveStats] = useState({ hotspot: 0, pppoe: 0, cpu: '0%' });
+  const [isConnecting, setIsConnecting] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -51,6 +53,43 @@ export default function Routers() {
     const result = await routersApi.getAll();
     if (result.success && result.data) {
       setRouters(result.data);
+    }
+  };
+
+  // دالة جلب البيانات الحقيقية من الراوتر
+  const fetchLiveStats = async (router: RouterType) => {
+    setIsConnecting(true);
+    // تصفير العدادات قبل الجلب
+    setLiveStats({ hotspot: 0, pppoe: 0, cpu: '0%' }); 
+    
+    try {
+      // يجب أن تتأكد من أن هذا الرابط يطابق الـ API الخاص بالباك إند عندك
+      const response = await fetch('/api/routers/live-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ipAddress: router.ipAddress,
+          port: router.port,
+          username: router.username,
+          password: router.password || ''
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setLiveStats({
+          hotspot: result.data.hotspotActiveCount,
+          pppoe: result.data.pppoeActiveCount,
+          cpu: result.data.cpuLoad
+        });
+      } else {
+        toast.error(result.error || 'فشل الاتصال بالراوتر');
+      }
+    } catch (error) {
+      toast.error('حدث خطأ في الاتصال بسيرفر سيرا');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -101,7 +140,7 @@ export default function Routers() {
       ipAddress: router.ipAddress,
       macAddress: router.macAddress || '',
       username: router.username || 'admin',
-      password: '', // للأمان: نجعل حقل كلمة المرور فارغاً عند التعديل
+      password: '', 
       port: router.port || 8728,
       location: router.location || ''
     });
@@ -324,14 +363,13 @@ export default function Routers() {
             />
           </div>
 
-          {/* Routers Grid - النسخة الذهبية المحدثة */}
+          {/* Routers Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredRouters.map((router) => (
               <Card 
                 key={router.id} 
                 className="relative overflow-hidden group hover:shadow-2xl transition-all duration-500 border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl"
               >
-                {/* خلفية جمالية تفاعلية للكارت */}
                 <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl opacity-20 group-hover:scale-150 group-hover:opacity-40 transition-all duration-700 ${
                   router.status === 'online' ? 'bg-green-500' : 'bg-red-500'
                 }`}></div>
@@ -339,7 +377,6 @@ export default function Routers() {
                 <CardHeader className="pb-3 relative z-10">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
-                      {/* أيقونة الحالة بنبض (Pulse) للمتصل */}
                       <div className="relative">
                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
                           router.status === 'online' ? 'bg-gradient-to-br from-green-400 to-emerald-600' : 
@@ -369,7 +406,6 @@ export default function Routers() {
                         </div>
                       </div>
                     </div>
-                    {/* أزرار التحكم العلوية */}
                     <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="icon" className="hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded-full" onClick={() => handleEdit(router)}>
                         <Edit2 className="w-4 h-4" />
@@ -405,7 +441,10 @@ export default function Routers() {
                   {/* أزرار الإجراءات السريعة */}
                   <div className="grid grid-cols-2 gap-3 mt-4">
                     <Button 
-                      onClick={() => setQuickConnectRouter(router)}
+                      onClick={() => {
+                        setQuickConnectRouter(router);
+                        fetchLiveStats(router); // استدعاء البيانات الحية
+                      }}
                       className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg shadow-blue-500/30 border-0 group/btn"
                     >
                       <Zap className="w-4 h-4 ml-2 group-hover/btn:scale-110 transition-transform text-yellow-300" />
@@ -449,20 +488,20 @@ export default function Routers() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
               <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-2xl hover:shadow-md transition-all border border-orange-200 dark:border-orange-900/50 text-orange-700 dark:text-orange-400">
                 <Users className="w-8 h-8 mb-2" />
-                <span className="font-bold text-lg">142</span>
+                <span className="font-bold text-lg">{isConnecting ? '...' : liveStats.hotspot}</span>
                 <span className="text-xs opacity-80">عملاء الهوت سبوت</span>
               </button>
 
               <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-2xl hover:shadow-md transition-all border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400">
                 <Wifi className="w-8 h-8 mb-2" />
-                <span className="font-bold text-lg">58</span>
+                <span className="font-bold text-lg">{isConnecting ? '...' : liveStats.pppoe}</span>
                 <span className="text-xs opacity-80">عملاء الـ PPPoE</span>
               </button>
 
               <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/10 rounded-2xl hover:shadow-md transition-all border border-purple-200 dark:border-purple-900/50 text-purple-700 dark:text-purple-400">
                 <ShieldCheck className="w-8 h-8 mb-2" />
-                <span className="font-bold text-lg">Firewall</span>
-                <span className="text-xs opacity-80">إدارة الفلترة</span>
+                <span className="font-bold text-lg text-sm">{isConnecting ? '...' : `CPU: ${liveStats.cpu}`}</span>
+                <span className="text-xs opacity-80">استهلاك المعالج</span>
               </button>
 
               <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-2xl hover:shadow-md transition-all border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400">
@@ -475,8 +514,14 @@ export default function Routers() {
             <div className="mt-6 p-4 bg-gray-900 rounded-xl text-green-400 font-mono text-sm overflow-hidden relative shadow-inner">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent opacity-50 animate-pulse"></div>
               <p>{'>'} Connecting to API ({quickConnectRouter?.ipAddress}:{quickConnectRouter?.port})...</p>
-              <p>{'>'} Authentication successful.</p>
-              <p className="animate-pulse">{'>'} Waiting for command_</p>
+              {isConnecting ? (
+                <p className="animate-pulse">{'>'} Fetching data from MikroTik...</p>
+              ) : (
+                <>
+                  <p>{'>'} Authentication successful.</p>
+                  <p className="animate-pulse">{'>'} Waiting for command_</p>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>
