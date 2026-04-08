@@ -9,8 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  ArrowRight, Ticket, Users, QrCode, Printer, CheckCircle, 
-  Palette, FileText, LayoutGrid, Clock3, DownloadCloud, Settings2, Trash2
+  ArrowRight, Ticket, QrCode, Printer, 
+  Palette, FileText, LayoutGrid, Clock3, DownloadCloud, 
+  Settings2, Trash2, Router, LayoutTemplate, Zap, Menu
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,8 +24,8 @@ interface GeneratedCard {
   password?: string;
   price: string;
   validity: string;
-  quota: string; // سعة التحميل
-  qrValue: string; // الرابط الخاص بـ QR Code Login
+  quota: string;
+  qrValue: string;
 }
 
 // ==========================================
@@ -32,31 +33,31 @@ interface GeneratedCard {
 // ==========================================
 export default function CreateCards() {
   const navigate = useNavigate();
-  const printAreaRef = useRef<HTMLDivElement>(null); // مرجع لمنطقة الطباعة
+  const printAreaRef = useRef<HTMLDivElement>(null); 
   
+  // حالة القائمة الجانبية (مهمة للموبايل وتم إضافتها لإصلاح الخطأ)
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   // حقول الإعدادات الأساسية
   const [networkId, setNetworkId] = useState('net-1');
   const [profileId, setProfileId] = useState('prof-1');
   const [quantity, setQuantity] = useState('10');
   const [prefix, setPrefix] = useState('omda-');
-  const [validity, setValidity] = useState('30'); // عدد الأيام
-  const [quota, setQuota] = useState('5'); // جيجابايت
-  const [price, setPrice] = useState('50'); // جنيه
 
   // حقول إعدادات التصميم والطباعة
-  const [columns, setColumns] = useState(4); // عدد الأعمدة في الطباعة
-  const [fontSize, setFontSize] = useState(12); // حجم الخط الأساسي
+  const [columns, setColumns] = useState(4); 
+  const fontSize = 12; // تم تحويلها لثابت لإصلاح خطأ عدم الاستخدام
   const [showQr, setShowQr] = useState(true);
   const [showValidity, setShowValidity] = useState(true);
-  const [cardTheme, setCardTheme] = useState('premium-gold'); // plain, classic, premium-gold
+  const [cardTheme, setCardTheme] = useState('premium-gold'); 
 
   // حالة الكروت المولّدة
   const [generatedCards, setGeneratedCards] = useState<GeneratedCard[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // ==========================================
-// بيانات وهمية (Mock Data) للشبكات والبروفايلات
-// ==========================================
+  // بيانات وهمية (Mock Data)
+  // ==========================================
   const networks = useMemo(() => [
     { id: 'net-1', name: 'كافيه العمده (MikroTik CHR)' },
     { id: 'net-2', name: 'قهوة درويش' },
@@ -69,39 +70,34 @@ export default function CreateCards() {
   ], []);
 
   // ==========================================
-  // دالة توليد الكروت (Mock Logic)
+  // دالة توليد الكروت
   // ==========================================
   const handleGenerateCards = () => {
     setIsGenerating(true);
-    setGeneratedCards([]); // تصفير القائمة الحالية
+    setGeneratedCards([]); 
 
     const count = parseInt(quantity) || 10;
     const newCards: GeneratedCard[] = [];
-
-    // جلب بيانات البروفايل المختار
     const selectedProfile = profiles.find(p => p.id === profileId);
 
-    // محاكاة الاتصال بالميكروتيك وتوليد اليوزرات
     setTimeout(() => {
       for (let i = 0; i < count; i++) {
-        // توليد اسم مستخدم وباسورد عشوائي (في النظام الحقيقي يأتي من API الميكروتيك)
         const randomString = Math.random().toString(36).substring(2, 6).toUpperCase();
         const username = `${prefix}${randomString}`;
         
         newCards.push({
           id: `card-${i}`,
           username: username,
-          // password: randomString, // في حال كان اليوزر فقط هو المطلوب
-          price: selectedProfile?.price || price,
+          price: selectedProfile?.price || '50',
           validity: selectedProfile?.validity === '1' ? 'يوم واحد' : `${selectedProfile?.validity} يوم`,
           quota: selectedProfile?.quota === '0' ? 'مفتوح' : `${selectedProfile?.quota} جيجا`,
-          qrValue: `http://abofahd.a2zspot.com/login?username=${username}` // مثال لرابط تسجيل الدخول عبر QR
+          qrValue: `http://abofahd.a2zspot.com/login?username=${username}`
         });
       }
       setGeneratedCards(newCards);
       setIsGenerating(false);
       toast.success(`تم توليد ${count} كارت بنجاح، جاهز للطباعة.`);
-    }, 1500); // محاكاة تأخير 1.5 ثانية للاتصال بالـ API
+    }, 1500); 
   };
 
   // ==========================================
@@ -112,15 +108,13 @@ export default function CreateCards() {
       toast.error('لا توجد كروت مولّدة للطباعة، قم بالإنشاء أولاً.');
       return;
     }
-    // نقوم بفتح نافذة الطباعة الخاصة بالمتصفح، مع إخفاء كل شيء عدا منطقة الطباعة عبر الـ CSS
     window.print();
   };
 
   // ==========================================
-  // مُكوّن الكارت الفردي (Single Card Component)
+  // مُكوّن الكارت الفردي
   // ==========================================
   const SingleCard = ({ card, theme, showQr, fontSize }: { card: GeneratedCard, theme: string, showQr: boolean, fontSize: number }) => {
-    // تحديد شكل الكارت بناءً على الثيم المختب
     const baseClass = "relative border border-gray-300 rounded overflow-hidden p-2 text-center break-inside-avoid print:shadow-none";
     const themeClass = theme === 'premium-gold' 
       ? 'bg-gradient-to-br from-gray-50 to-amber-50 border-amber-300 text-amber-950 shadow-inner'
@@ -130,34 +124,28 @@ export default function CreateCards() {
 
     return (
       <div className={`${baseClass} ${themeClass}`} style={{ fontSize: `${fontSize}px` }}>
-        {/* اللوجو (placeholder) */}
         <div className="flex items-center justify-center gap-1 mb-1 pb-1 border-b border-gray-200 dark:border-gray-700 print:border-gray-300">
           <Ticket className={`w-4 h-4 ${theme === 'premium-gold' ? 'text-amber-600' : 'text-gray-600'}`} />
           <span className="font-bold text-[0.8rem]">شبكة العمده</span>
         </div>
         
-        {/* السعر البارز */}
         <div className={`${theme === 'premium-gold' ? 'bg-amber-600' : 'bg-gray-800'} text-white font-black text-[1rem] py-0.5 rounded-sm inline-block px-3 mb-1.5 print:bg-gray-800`}>
           {card.price} ج
         </div>
 
-        {/* بيانات المستخدم */}
         <div className="space-y-1 mb-2">
            <p className="text-gray-500 text-[0.7rem] font-medium print:text-gray-600">اسم المستخدم:</p>
            <p className="font-mono font-bold text-[0.9rem] bg-gray-100 px-2 py-0.5 rounded-sm dark:bg-gray-700 dark:text-gray-100 print:bg-gray-100">{card.username}</p>
         </div>
 
-        {/* QR Code (placeholder - يحتاج لمكتبة مثل qrcode.react للتوليد الحقيقي) */}
         {showQr && (
           <div className="flex justify-center mb-1.5 p-1 bg-white inline-block border border-gray-200 print:border-gray-300">
              <div className="w-16 h-16 bg-gray-200 flex items-center justify-center">
                  <QrCode className="w-12 h-12 text-gray-500" />
              </div>
-             {/* في النظام الحقيقي: <QRCodeValue value={card.qrValue} size={64} /> */}
           </div>
         )}
 
-        {/* بيانات الصلاحية */}
         {showValidity && (
            <div className="flex justify-between items-center text-[0.7rem] text-gray-600 mt-1 pt-1 border-t border-gray-100 print:border-gray-200">
               <span className="font-medium">سعة التحميل:</span>
@@ -171,7 +159,6 @@ export default function CreateCards() {
            </div>
         )}
         
-        {/* تزيين للخلفية في الـ premium theme */}
         {theme === 'premium-gold' && (
           <div className="absolute -top-4 -left-4 w-10 h-10 rounded-full bg-amber-200 opacity-30 blur-xl"></div>
         )}
@@ -185,9 +172,7 @@ export default function CreateCards() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex font-sans" dir="rtl">
       
-      {/* Sidebar - (نستخدم نفس المنطق الموجود في Routers.tsx لعرض القائمة الجانبية) */}
       <aside className={`fixed inset-y-0 right-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-xl transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 lg:static print:hidden`}>
-        {/* ... محتوى القائمة الجانبية (يمكن نسخه من Routers.tsx) ... */}
          <div className="h-full flex flex-col">
             <nav className="flex-1 p-4 space-y-2 mt-20">
               <button
@@ -215,31 +200,29 @@ export default function CreateCards() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 min-w-0 overflow-y-auto">
         
-        {/* Header (مخفي عند الطباعة) */}
         <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800 px-6 py-4 print:hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
+                <Menu className="w-6 h-6" />
+              </Button>
                <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
                 <Ticket className="w-6 h-6 text-amber-950" />
               </div>
               <div>
                 <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-600">توليد الكروت المخصصة</h1>
-                <p className="text-sm text-gray-500 font-medium">قم بإنشاء وطباعة كروت الهوت سبوت بلمسة ذهبية</p>
+                <p className="text-sm text-gray-500 font-medium hidden md:block">قم بإنشاء وطباعة كروت الهوت سبوت بلمسة ذهبية</p>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Content Area */}
         <div className="p-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 print:p-0 print:m-0 print:max-w-none">
           
-          {/* العمود الأيسر: الإعدادات (مخفي عند الطباعة) */}
           <div className="md:col-span-1 space-y-6 print:hidden">
             
-            {/* 1. إعدادات البطاقة */}
             <Card className="border border-gray-100 dark:border-gray-800 shadow-sm rounded-2xl">
               <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-800 flex flex-row items-center gap-3">
                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-600 dark:text-blue-400">
@@ -279,7 +262,7 @@ export default function CreateCards() {
                      <Input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="مثال: 50" className="rounded-xl border-gray-200 dark:border-gray-700 focus:ring-blue-500" />
                    </div>
                    <div className="space-y-2">
-                     <Label className="font-bold">بادئة المستخدم (اختياري)</Label>
+                     <Label className="font-bold">بادئة المستخدم</Label>
                      <Input type="text" value={prefix} onChange={e => setPrefix(e.target.value)} placeholder="omda-" className="rounded-xl border-gray-200 dark:border-gray-700 focus:ring-blue-500 font-mono" />
                    </div>
                 </div>
@@ -296,13 +279,12 @@ export default function CreateCards() {
               </CardContent>
             </Card>
 
-            {/* 2. إعدادات التصميم والطباعة */}
             <Card className="border border-gray-100 dark:border-gray-800 shadow-sm rounded-2xl">
               <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-800 flex flex-row items-center gap-3">
                  <div className="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-lg text-amber-600 dark:text-amber-400">
                   <Palette className="w-5 h-5" />
                 </div>
-                <CardTitle className="text-xl font-black tracking-tight text-gray-800 dark:text-gray-100">إعدادات التصميم والطباعة</CardTitle>
+                <CardTitle className="text-xl font-black tracking-tight text-gray-800 dark:text-gray-100">إعدادات التصميم</CardTitle>
               </CardHeader>
               <CardContent className="pt-5 space-y-4">
                 
@@ -341,10 +323,8 @@ export default function CreateCards() {
 
           </div>
 
-          {/* العمود الأيمن: نموذج المعاينة والطباعة */}
           <div className="md:col-span-2 space-y-6 print:p-0 print:m-0">
             
-            {/* شريط أدوات المعاينة والطباعة (مخفي عند الطباعة) */}
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 print:hidden">
               <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
                   <LayoutGrid className="w-5 h-5 text-gray-500" />
@@ -367,7 +347,6 @@ export default function CreateCards() {
               </div>
             </div>
 
-            {/* منطقة الطباعة (هذه المنطقة فقط هي التي ستظهر في نافذة الطباعة) */}
             <div ref={printAreaRef} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-lg min-h-[400px] dark:bg-gray-800 dark:border-gray-700 print:border-0 print:shadow-none print:p-0 print:m-0 print:rounded-none">
                 
                 {generatedCards.length === 0 && (
@@ -382,15 +361,14 @@ export default function CreateCards() {
                     <Tabs defaultValue="a4-grid" className="print:hidden">
                         <TabsList className="grid w-[400px] grid-cols-2 mb-6 bg-gray-100 dark:bg-gray-900 rounded-xl p-1 h-12">
                             <TabsTrigger value="a4-grid" className="rounded-lg h-10 data-[state=checked]:bg-white dark:data-[state=checked]:bg-gray-800 data-[state=checked]:font-black data-[state=checked]:text-amber-800 dark:data-[state=checked]:text-amber-400">
-                                <FileText className="w-4 h-4 ml-2" /> نموذج طباعة أعمدة A4
+                                <FileText className="w-4 h-4 ml-2" /> طباعة أعمدة A4
                             </TabsTrigger>
                             <TabsTrigger value="thermal" className="rounded-lg h-10 data-[state=checked]:bg-white dark:data-[state=checked]:bg-gray-800 data-[state=checked]:font-black data-[state=checked]:text-amber-800 dark:data-[state=checked]:text-amber-400">
-                                <DownloadCloud className="w-4 h-4 ml-2" /> نموذج طباعة حرارية (كاشير)
+                                <DownloadCloud className="w-4 h-4 ml-2" /> طباعة حرارية (كاشير)
                             </TabsTrigger>
                         </TabsList>
                         
                         <TabsContent value="a4-grid">
-                            {/* نموذج A4: شبكة أعمدة قابلة للتخصيص */}
                             <div className="flex items-center gap-4 mb-5 p-3 bg-amber-50/50 dark:bg-gray-900/50 rounded-xl border border-amber-100 dark:border-gray-700 print:hidden">
                                 <Label className="font-bold whitespace-nowrap">عدد الأعمدة (A4):</Label>
                                 <Slider value={[columns]} onValueChange={([val]) => setColumns(val)} min={1} max={6} step={1} className="flex-1 w-64" />
@@ -399,7 +377,7 @@ export default function CreateCards() {
                         
                             <div 
                                 className="grid gap-2 print:grid print:grid-cols-4 print:gap-1 p-1 bg-white print:p-0 print:m-0" 
-                                style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }} // تطبيق عدد الأعمدة برمجياً في الـ preview
+                                style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }} 
                             >
                                 {generatedCards.map(card => (
                                     <SingleCard key={card.id} card={card} theme={cardTheme} showQr={showQr} fontSize={fontSize} />
@@ -408,7 +386,6 @@ export default function CreateCards() {
                         </TabsContent>
 
                         <TabsContent value="thermal">
-                           {/* نموذج حراري: عمود واحد ضيق */}
                             <div className="max-w-[300px] mx-auto space-y-2 p-2 bg-white border border-gray-100 print:border-0 print:p-0">
                                 {generatedCards.map(card => (
                                     <SingleCard key={card.id} card={card} theme={cardTheme} showQr={showQr} fontSize={fontSize} />
