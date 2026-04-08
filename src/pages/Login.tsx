@@ -282,12 +282,7 @@ export default function Login() {
             ))}
           </div>
 
-          <div className="mt-6 text-center">
-            <div className="inline-block glass rounded-xl px-6 py-3">
-              <p className="text-xs text-gray-400 mb-1">بيانات تسجيل الدخول</p>
-              <p className="text-sm font-mono text-gray-300" dir="ltr">admin@sira.software</p>
-              <p className="text-sm font-mono text-gray-300">admin123</p>
-            </div>
+              </div>
           </div>
         </div>
       </div>
