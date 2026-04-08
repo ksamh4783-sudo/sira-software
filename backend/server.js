@@ -6,7 +6,7 @@ import fs from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
-import { RouterOSClient } from 'routeros-client' // ← تمت إضافة مكتبة الميكروتيك هنا
+import { RouterOSAPI } from 'node-routeros' // ← تم التحديث للمكتبة الصحيحة هنا
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -359,7 +359,7 @@ app.get('/api/routers', authenticateToken, (req, res) => {
   res.json({ success: true, data: userRouters })
 })
 
-// مسار الاتصال المباشر بالميكروتيك - (تمت إضافته هنا!)
+// مسار الاتصال المباشر بالميكروتيك - (تم التحديث للمكتبة الجديدة node-routeros)
 app.post('/api/routers/live-stats', authenticateToken, async (req, res) => {
   const { ipAddress, port, username, password } = req.body;
 
@@ -371,25 +371,22 @@ app.post('/api/routers/live-stats', authenticateToken, async (req, res) => {
   }
 
   try {
-    const api = new RouterOSClient({
+    const conn = new RouterOSAPI({
       host: ipAddress,
       user: username,
       password: password || '',
       port: port || 8728,
-      keepalive: true,
-      timeout: 5 // مهلة 5 ثواني
+      timeout: 5
     });
 
-    const client = await api.connect();
+    await conn.connect();
 
-    // جلب البيانات مع تخطي الأخطاء في حال كان أحد القوائم فارغاً
-    const [hotspotUsers, pppoeUsers, resources] = await Promise.all([
-      client.menu('/ip/hotspot/active').get().catch(() => []),
-      client.menu('/ppp/active').get().catch(() => []),
-      client.menu('/system/resource').get().catch(() => [{}])
-    ]);
+    // جلب البيانات باستخدام أوامر الميكروتيك الفعلية للمكتبة الجديدة
+    const hotspotUsers = await conn.write('/ip/hotspot/active/print');
+    const pppoeUsers = await conn.write('/ppp/active/print');
+    const resources = await conn.write('/system/resource/print');
 
-    client.close();
+    conn.close();
 
     res.json({
       success: true,
@@ -1018,12 +1015,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('')
   console.log('╔════════════════════════════════════════════════════════════╗')
   console.log('║            🚀 SIRA SOFTWARE PRO v2.0.0 🚀                  ║')
-  console.log('║      Advanced Network Management & Hotspot Billing         ║')
+  console.log('║       Advanced Network Management & Hotspot Billing        ║')
   console.log('╠════════════════════════════════════════════════════════════╣')
-  console.log(`║  📡 Server: http://0.0.0.0:${PORT}                           ║`)
+  console.log(`║  📡 Server: http://0.0.0.0:${PORT}                             ║`)
   console.log(`║  🔐 Admin: admin@sira.software / admin123                  ║`)
-  console.log(`║  🌍 Environment: ${process.env.NODE_ENV || 'development'}                           ║`)
-  console.log(`║  ⏰ Started: ${new Date().toLocaleString()}                    ║`)
+  console.log(`║  🌍 Environment: ${process.env.NODE_ENV || 'development'}                             ║`)
+  console.log(`║  ⏰ Started: ${new Date().toLocaleString()}                     ║`)
   console.log('╚════════════════════════════════════════════════════════════╝')
   console.log('')
 })
