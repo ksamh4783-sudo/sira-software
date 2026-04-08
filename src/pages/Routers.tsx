@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
   Router, Plus, Search, Edit2, Trash2, Power, 
-  MapPin, Wifi, ArrowRight, Menu, Settings, Activity
+  MapPin, Wifi, ArrowRight, Menu, Settings, Activity,
+  Zap, LayoutTemplate, Users, ShieldCheck, Terminal
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Router as RouterType } from '@/types';
@@ -23,6 +24,9 @@ export default function Routers() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingRouter, setEditingRouter] = useState<RouterType | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // حالة نافذة الاتصال السريع المضافة حديثاً
+  const [quickConnectRouter, setQuickConnectRouter] = useState<RouterType | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -97,7 +101,7 @@ export default function Routers() {
       ipAddress: router.ipAddress,
       macAddress: router.macAddress || '',
       username: router.username || 'admin',
-      password: router.password || '',
+      password: '', // للأمان: نجعل حقل كلمة المرور فارغاً عند التعديل
       port: router.port || 8728,
       location: router.location || ''
     });
@@ -237,6 +241,7 @@ export default function Routers() {
                         type="password"
                         value={formData.password} 
                         onChange={(e) => setFormData({...formData, password: e.target.value})}
+                        placeholder={editingRouter ? "اتركه فارغاً للاحتفاظ بالقديم" : ""}
                       />
                     </div>
                   </div>
@@ -319,61 +324,101 @@ export default function Routers() {
             />
           </div>
 
-          {/* Routers Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Routers Grid - النسخة الذهبية المحدثة */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredRouters.map((router) => (
-              <Card key={router.id} className="card-hover">
-                <CardHeader className="pb-3">
+              <Card 
+                key={router.id} 
+                className="relative overflow-hidden group hover:shadow-2xl transition-all duration-500 border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl"
+              >
+                {/* خلفية جمالية تفاعلية للكارت */}
+                <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl opacity-20 group-hover:scale-150 group-hover:opacity-40 transition-all duration-700 ${
+                  router.status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                }`}></div>
+
+                <CardHeader className="pb-3 relative z-10">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        router.status === 'online' ? 'bg-green-100' : 
-                        router.status === 'maintenance' ? 'bg-yellow-100' : 'bg-red-100'
-                      }`}>
-                        <Router className={`w-5 h-5 ${
-                          router.status === 'online' ? 'text-green-600' : 
-                          router.status === 'maintenance' ? 'text-yellow-600' : 'text-red-600'
-                        }`} />
+                    <div className="flex items-center gap-4">
+                      {/* أيقونة الحالة بنبض (Pulse) للمتصل */}
+                      <div className="relative">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
+                          router.status === 'online' ? 'bg-gradient-to-br from-green-400 to-emerald-600' : 
+                          router.status === 'maintenance' ? 'bg-gradient-to-br from-yellow-400 to-orange-500' : 
+                          'bg-gradient-to-br from-red-400 to-rose-600'
+                        }`}>
+                          <Router className="w-6 h-6 text-white" />
+                        </div>
+                        {router.status === 'online' && (
+                          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-ping"></span>
+                        )}
+                        {router.status === 'online' && (
+                          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></span>
+                        )}
                       </div>
                       <div>
-                        <CardTitle className="text-base">{router.name}</CardTitle>
-                        <Badge variant={router.status === 'online' ? 'default' : 'secondary'} className="text-xs">
-                          {router.status === 'online' ? 'متصل' : router.status === 'maintenance' ? 'صيانة' : 'غير متصل'}
-                        </Badge>
+                        <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">
+                          {router.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-1 mt-1">
+                          <Badge variant="outline" className={`text-xs border-0 px-2 py-0.5 rounded-full ${
+                            router.status === 'online' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 
+                            'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          }`}>
+                            {router.status === 'online' ? 'متصل ومستقر' : 'غير متصل'}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(router)}>
+                    {/* أزرار التحكم العلوية */}
+                    <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded-full" onClick={() => handleEdit(router)}>
                         <Edit2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(router)}>
-                        <Trash2 className="w-4 h-4 text-red-500" />
+                      <Button variant="ghost" size="icon" className="hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 rounded-full" onClick={() => handleDelete(router)}>
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Power className="w-4 h-4" />
-                      <span>{router.ipAddress}:{router.port}</span>
-                    </div>
-                    {router.macAddress && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Wifi className="w-4 h-4" />
-                        <span>{router.macAddress}</span>
+
+                <CardContent className="pt-2 relative z-10">
+                  <div className="space-y-3 text-sm mb-5 p-3 bg-gray-50/50 dark:bg-gray-900/50 rounded-xl">
+                    <div className="flex items-center justify-between text-gray-600 dark:text-gray-300">
+                      <div className="flex items-center gap-2">
+                        <Power className="w-4 h-4 text-blue-500" />
+                        <span>IP السيرفر:</span>
                       </div>
-                    )}
+                      <span className="font-mono font-medium">{router.ipAddress}:{router.port}</span>
+                    </div>
+                    
                     {router.location && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>{router.location}</span>
+                      <div className="flex items-center justify-between text-gray-600 dark:text-gray-300">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-purple-500" />
+                          <span>الموقع:</span>
+                        </div>
+                        <span className="font-medium">{router.location}</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Activity className="w-4 h-4" />
-                      <span>آخر اتصال: {router.lastSeen ? new Date(router.lastSeen).toLocaleDateString('ar-EG') : 'غير معروف'}</span>
-                    </div>
+                  </div>
+
+                  {/* أزرار الإجراءات السريعة */}
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <Button 
+                      onClick={() => setQuickConnectRouter(router)}
+                      className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg shadow-blue-500/30 border-0 group/btn"
+                    >
+                      <Zap className="w-4 h-4 ml-2 group-hover/btn:scale-110 transition-transform text-yellow-300" />
+                      اتصال بلمسة
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="w-full border-2 border-indigo-100 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 group/hotspot"
+                      onClick={() => navigate(`/hotspot-themes/${router.id}`)}
+                    >
+                      <LayoutTemplate className="w-4 h-4 ml-2 group-hover/hotspot:rotate-12 transition-transform" />
+                      صفحات الهوت سبوت
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -388,6 +433,53 @@ export default function Routers() {
             </div>
           )}
         </div>
+
+        {/* نافذة الاتصال بلمسة المباشرة */}
+        <Dialog open={!!quickConnectRouter} onOpenChange={() => setQuickConnectRouter(null)}>
+          <DialogContent className="max-w-2xl bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-blue-200 dark:border-blue-900">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-3 text-xl">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-600 dark:text-blue-400">
+                  <Terminal className="w-6 h-6" />
+                </div>
+                إدارة مباشرة: {quickConnectRouter?.name}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+              <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-2xl hover:shadow-md transition-all border border-orange-200 dark:border-orange-900/50 text-orange-700 dark:text-orange-400">
+                <Users className="w-8 h-8 mb-2" />
+                <span className="font-bold text-lg">142</span>
+                <span className="text-xs opacity-80">عملاء الهوت سبوت</span>
+              </button>
+
+              <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-2xl hover:shadow-md transition-all border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-400">
+                <Wifi className="w-8 h-8 mb-2" />
+                <span className="font-bold text-lg">58</span>
+                <span className="text-xs opacity-80">عملاء الـ PPPoE</span>
+              </button>
+
+              <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/10 rounded-2xl hover:shadow-md transition-all border border-purple-200 dark:border-purple-900/50 text-purple-700 dark:text-purple-400">
+                <ShieldCheck className="w-8 h-8 mb-2" />
+                <span className="font-bold text-lg">Firewall</span>
+                <span className="text-xs opacity-80">إدارة الفلترة</span>
+              </button>
+
+              <button className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-2xl hover:shadow-md transition-all border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400">
+                <Power className="w-8 h-8 mb-2" />
+                <span className="font-bold text-lg">Reboot</span>
+                <span className="text-xs opacity-80">إعادة تشغيل</span>
+              </button>
+            </div>
+
+            <div className="mt-6 p-4 bg-gray-900 rounded-xl text-green-400 font-mono text-sm overflow-hidden relative shadow-inner">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent opacity-50 animate-pulse"></div>
+              <p>{'>'} Connecting to API ({quickConnectRouter?.ipAddress}:{quickConnectRouter?.port})...</p>
+              <p>{'>'} Authentication successful.</p>
+              <p className="animate-pulse">{'>'} Waiting for command_</p>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
