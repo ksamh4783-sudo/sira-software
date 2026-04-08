@@ -6,6 +6,7 @@ import fs from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
+import { RouterOSClient } from 'routeros-client' // ← تمت إضافة مكتبة الميكروتيك هنا
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -357,6 +358,56 @@ app.get('/api/routers', authenticateToken, (req, res) => {
   const userRouters = db.routers.filter(r => r.companyId === req.user.id)
   res.json({ success: true, data: userRouters })
 })
+
+// مسار الاتصال المباشر بالميكروتيك - (تمت إضافته هنا!)
+app.post('/api/routers/live-stats', authenticateToken, async (req, res) => {
+  const { ipAddress, port, username, password } = req.body;
+
+  if (!ipAddress || !username) {
+    return res.status(400).json({ 
+      error: 'البيانات غير مكتملة للاتصال بالراوتر',
+      success: false 
+    });
+  }
+
+  try {
+    const api = new RouterOSClient({
+      host: ipAddress,
+      user: username,
+      password: password || '',
+      port: port || 8728,
+      keepalive: true,
+      timeout: 5 // مهلة 5 ثواني
+    });
+
+    const client = await api.connect();
+
+    // جلب البيانات مع تخطي الأخطاء في حال كان أحد القوائم فارغاً
+    const [hotspotUsers, pppoeUsers, resources] = await Promise.all([
+      client.menu('/ip/hotspot/active').get().catch(() => []),
+      client.menu('/ppp/active').get().catch(() => []),
+      client.menu('/system/resource').get().catch(() => [{}])
+    ]);
+
+    client.close();
+
+    res.json({
+      success: true,
+      data: {
+        hotspotActiveCount: hotspotUsers.length || 0,
+        pppoeActiveCount: pppoeUsers.length || 0,
+        cpuLoad: resources[0] && resources[0]['cpu-load'] ? `${resources[0]['cpu-load']}%` : '0%',
+      }
+    });
+
+  } catch (error) {
+    console.error("MikroTik Connection Error:", error.message);
+    res.status(500).json({ 
+      error: 'فشل الاتصال بالراوتر، تأكد من صحة الـ IP وتفعيل الـ API في الراوتر.',
+      success: false 
+    });
+  }
+});
 
 app.post('/api/routers', authenticateToken, async (req, res) => {
   try {
@@ -966,12 +1017,12 @@ app.put('/api/settings', authenticateToken, (req, res) => {
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('')
   console.log('╔════════════════════════════════════════════════════════════╗')
-  console.log('║           🚀 SIRA SOFTWARE PRO v2.0.0 🚀                   ║')
-  console.log('║     Advanced Network Management & Hotspot Billing         ║')
+  console.log('║            🚀 SIRA SOFTWARE PRO v2.0.0 🚀                  ║')
+  console.log('║      Advanced Network Management & Hotspot Billing         ║')
   console.log('╠════════════════════════════════════════════════════════════╣')
-  console.log(`║  📡 Server: http://0.0.0.0:${PORT}                          ║`)
-  console.log(`║  🔐 Admin: admin@sira.software / admin123                 ║`)
-  console.log(`║  🌍 Environment: ${process.env.NODE_ENV || 'development'}                          ║`)
+  console.log(`║  📡 Server: http://0.0.0.0:${PORT}                           ║`)
+  console.log(`║  🔐 Admin: admin@sira.software / admin123                  ║`)
+  console.log(`║  🌍 Environment: ${process.env.NODE_ENV || 'development'}                           ║`)
   console.log(`║  ⏰ Started: ${new Date().toLocaleString()}                    ║`)
   console.log('╚════════════════════════════════════════════════════════════╝')
   console.log('')
