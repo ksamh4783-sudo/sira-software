@@ -5,7 +5,7 @@ import { routersApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -56,17 +56,23 @@ export default function Routers() {
     }
   };
 
-  // دالة جلب البيانات الحقيقية من الراوتر
+  // دالة جلب البيانات الحقيقية من الراوتر مع إرسال الـ Token
   const fetchLiveStats = async (router: RouterType) => {
     setIsConnecting(true);
     // تصفير العدادات قبل الجلب
     setLiveStats({ hotspot: 0, pppoe: 0, cpu: '0%' }); 
     
     try {
+      // جلب التوكن الخاص بـ سيرا
+      const token = localStorage.getItem('token');
+
       // يجب أن تتأكد من أن هذا الرابط يطابق الـ API الخاص بالباك إند عندك
       const response = await fetch('/api/routers/live-stats', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // تم إضافة التوكن هنا لحل مشكلة 401
+        },
         body: JSON.stringify({
           ipAddress: router.ipAddress,
           port: router.port,
@@ -77,7 +83,7 @@ export default function Routers() {
       
       const result = await response.json();
       
-      if (result.success) {
+      if (response.ok && result.success) {
         setLiveStats({
           hotspot: result.data.hotspotActiveCount,
           pppoe: result.data.pppoeActiveCount,
@@ -226,6 +232,9 @@ export default function Routers() {
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>{editingRouter ? 'تعديل راوتر' : 'إضافة راوتر MikroTik جديد'}</DialogTitle>
+                  <DialogDescription className="sr-only">
+                    قم بإدخال بيانات الراوتر للاتصال به وإضافته إلى نظام سيرا.
+                  </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                   <div>
@@ -483,6 +492,9 @@ export default function Routers() {
                 </div>
                 إدارة مباشرة: {quickConnectRouter?.name}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                نافذة تحكم سريعة لعرض الإحصائيات الحية من الراوتر وإرسال الأوامر.
+              </DialogDescription>
             </DialogHeader>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
