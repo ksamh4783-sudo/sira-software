@@ -7,9 +7,6 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
 import { RouterOSAPI } from 'node-routeros'
-import MikroTikManager from './mikrotik-api.js'
-import FingerprintManager from './fingerprint-api.js'
-import DVRManager from './dvr-api.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -99,127 +96,67 @@ const initAdmin = async () => {
       avatar: '',
       subscriptionPlan: 'enterprise',
       subscriptionStatus: 'active',
-      subscriptionExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      companyName: 'Sira Software',
-      phone: '+201065063147',
-      address: 'Cairo, Egypt',
       createdAt: new Date().toISOString(),
       lastLogin: null,
       isActive: true
     })
     saveDB()
-    console.log('✅ Admin created: admin@sira.software / admin123')
+    console.log('✅ Admin user created')
   }
 }
-await initAdmin()
 
-// Auth Middleware
+// Middleware to authenticate JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
-  
+
   if (!token) {
-    return res.status(401).json({ error: 'Access token required', success: false })
+    return res.status(401).json({ error: 'Access token required' })
   }
-  
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token', success: false })
-    }
-    req.user = user
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    req.user = decoded
     next()
-  })
-}
-
-// Admin Middleware
-const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required', success: false })
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token' })
   }
-  next()
 }
-
-// Error Handler
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err.message)
-  res.status(500).json({ error: 'Internal server error', success: false })
-})
-
-// ==================== ROUTES ====================
-
-// Health Check
-app.get('/', (req, res) => {
-  res.json({
-    name: 'Sira Software Pro API',
-    version: '2.0.0',
-    status: 'running',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      auth: '/api/auth',
-      dashboard: '/api/dashboard',
-      routers: '/api/routers',
-      vouchers: '/api/vouchers',
-      backgrounds: '/api/backgrounds',
-      printCards: '/api/print-cards',
-      hotspotPages: '/api/hotspot-pages',
-      activity: '/api/activity',
-      settings: '/api/settings'
-    }
-  })
-})
-
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-    memory: process.memoryUsage(),
-    version: '2.0.0'
-  })
-})
 
 // ==================== AUTH ====================
 
+// Login
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body
     
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required', success: false })
-    }
-    
-    const user = db.users.find(u => u.email === email && u.isActive !== false)
-    
+    const user = db.users.find(u => u.email === email)
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials', success: false })
+      return res.status(401).json({ error: 'Invalid credentials' })
     }
-    
-    const validPassword = await bcrypt.compare(password, user.password)
-    
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials', success: false })
+
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid credentials' })
     }
-    
-    // Update last login
-    user.lastLogin = new Date().toISOString()
-    saveDB()
-    
+
+    if (!user.isActive) {
+      return res.status(401).json({ error: 'Account is disabled' })
+    }
+
     const token = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email, 
-        role: user.role,
-        name: user.name 
-      },
+      { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     )
-    
+
+    user.lastLogin = new Date().toISOString()
+    saveDB()
+
     logActivity(user.id, 'LOGIN', { email: user.email })
-    
+
     res.json({
       success: true,
-      message: 'Login successful',
       data: {
         token,
         user: {
@@ -228,7 +165,6 @@ app.post('/api/auth/login', async (req, res) => {
           name: user.name,
           role: user.role,
           avatar: user.avatar,
-          companyName: user.companyName,
           subscriptionPlan: user.subscriptionPlan,
           subscriptionStatus: user.subscriptionStatus
         }
@@ -236,59 +172,79 @@ app.post('/api/auth/login', async (req, res) => {
     })
   } catch (error) {
     console.error('Login error:', error)
-    res.status(500).json({ error: 'Server error during login', success: false })
+    res.status(500).json({ error: 'Login failed' })
   }
 })
 
+// Register
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, name, companyName, phone } = req.body
+    const { email, password, name, companyName, phone, address } = req.body
     
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Required fields missing', success: false })
+    const existingUser = db.users.find(u => u.email === email)
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' })
     }
+
+    const hashedPassword = await bcrypt.hash(password, 12)
     
-    const exists = db.users.find(u => u.email === email)
-    if (exists) {
-      return res.status(400).json({ error: 'User already exists', success: false })
-    }
-    
-    const hash = await bcrypt.hash(password, 12)
-    const user = {
+    const newUser = {
       id: uuidv4(),
       email,
-      password: hash,
+      password: hashedPassword,
       name,
       role: 'user',
-      avatar: '',
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
       companyName: companyName || '',
       phone: phone || '',
-      subscriptionPlan: 'starter',
+      address: address || '',
+      subscriptionPlan: 'basic',
       subscriptionStatus: 'active',
       subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       createdAt: new Date().toISOString(),
       lastLogin: null,
       isActive: true
     }
-    
-    db.users.push(user)
+
+    db.users.push(newUser)
     saveDB()
-    
-    logActivity(user.id, 'REGISTER', { email })
-    
-    res.json({ success: true, message: 'User registered successfully' })
+
+    const token = jwt.sign(
+      { id: newUser.id, email: newUser.email, role: newUser.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    )
+
+    logActivity(newUser.id, 'REGISTER', { email: newUser.email })
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          role: newUser.role,
+          avatar: newUser.avatar,
+          subscriptionPlan: newUser.subscriptionPlan,
+          subscriptionStatus: newUser.subscriptionStatus
+        }
+      }
+    })
   } catch (error) {
     console.error('Registration error:', error)
-    res.status(500).json({ error: 'Server error during registration', success: false })
+    res.status(500).json({ error: 'Registration failed' })
   }
 })
 
+// Get current user
 app.get('/api/auth/me', authenticateToken, (req, res) => {
   const user = db.users.find(u => u.id === req.user.id)
   if (!user) {
-    return res.status(404).json({ error: 'User not found', success: false })
+    return res.status(404).json({ error: 'User not found' })
   }
-  
+
   res.json({
     success: true,
     data: {
@@ -299,6 +255,7 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
       avatar: user.avatar,
       companyName: user.companyName,
       phone: user.phone,
+      address: user.address,
       subscriptionPlan: user.subscriptionPlan,
       subscriptionStatus: user.subscriptionStatus,
       subscriptionExpiry: user.subscriptionExpiry
@@ -306,53 +263,114 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
   })
 })
 
+// Update profile
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = db.users.find(u => u.id === req.user.id)
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    const { name, companyName, phone, address, avatar } = req.body
+    
+    if (name !== undefined) user.name = name
+    if (companyName !== undefined) user.companyName = companyName
+    if (phone !== undefined) user.phone = phone
+    if (address !== undefined) user.address = address
+    if (avatar !== undefined) user.avatar = avatar
+
+    saveDB()
+
+    logActivity(user.id, 'PROFILE_UPDATED', { name: user.name })
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        avatar: user.avatar,
+        companyName: user.companyName,
+        phone: user.phone,
+        address: user.address,
+        subscriptionPlan: user.subscriptionPlan,
+        subscriptionStatus: user.subscriptionStatus
+      }
+    })
+  } catch (error) {
+    console.error('Profile update error:', error)
+    res.status(500).json({ error: 'Profile update failed' })
+  }
+})
+
 // ==================== DASHBOARD ====================
 
 app.get('/api/dashboard', authenticateToken, (req, res) => {
-  const userRouters = db.routers.filter(r => r.companyId === req.user.id)
-  const userVouchers = db.vouchers.filter(v => v.companyId === req.user.id)
-  const userBackgrounds = db.backgrounds.filter(b => b.companyId === req.user.id)
-  const userPrintCards = db.printCards.filter(c => c.companyId === req.user.id)
-  const userHotspotPages = db.hotspotPages.filter(p => p.companyId === req.user.id)
-  const userLogs = db.activityLogs.filter(l => l.userId === req.user.id).slice(0, 10)
-  
-  // Calculate revenue by month
-  const now = new Date()
-  const monthlyRevenue = []
-  for (let i = 5; i >= 0; i--) {
-    const month = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const monthVouchers = userVouchers.filter(v => {
-      const vDate = new Date(v.createdAt)
-      return vDate.getMonth() === month.getMonth() && vDate.getFullYear() === month.getFullYear()
-    })
-    monthlyRevenue.push({
-      month: month.toLocaleString('ar-EG', { month: 'short' }),
-      revenue: monthVouchers.filter(v => v.isUsed).reduce((sum, v) => sum + (v.price || 0), 0),
-      count: monthVouchers.length
-    })
-  }
-  
-  const stats = {
-    totalRouters: userRouters.length,
-    activeRouters: userRouters.filter(r => r.status === 'online').length,
-    totalVouchers: userVouchers.length,
-    usedVouchers: userVouchers.filter(v => v.isUsed).length,
-    unusedVouchers: userVouchers.filter(v => !v.isUsed).length,
-    revenue: userVouchers.filter(v => v.isUsed).reduce((sum, v) => sum + (v.price || 0), 0),
-    totalBackgrounds: userBackgrounds.length,
-    totalPrintCards: userPrintCards.length,
-    totalHotspotPages: userHotspotPages.length,
-    activeHotspotPages: userHotspotPages.filter(p => p.isActive).length,
-    monthlyRevenue,
-    recentActivity: userLogs,
-    systemHealth: {
-      status: 'excellent',
-      uptime: process.uptime(),
-      lastBackup: new Date().toISOString()
+  try {
+    const userCameras = db.dvrCameras.filter(c => c.companyId === req.user.id)
+    const userVouchers = db.vouchers.filter(v => v.companyId === req.user.id)
+    const userBackgrounds = db.backgrounds.filter(b => b.companyId === req.user.id)
+    const userPrintCards = db.printCards.filter(p => p.companyId === req.user.id)
+    const userHotspotPages = db.hotspotPages.filter(h => h.companyId === req.user.id)
+    const userFingerprintDevices = db.fingerprintDevices.filter(f => f.companyId === req.user.id)
+    
+    const recentActivity = db.activityLogs
+      .filter(log => log.userId === req.user.id)
+      .slice(0, 10)
+
+    // Calculate monthly revenue
+    const monthlyRevenue = []
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date()
+      date.setMonth(date.getMonth() - i)
+      const monthYear = date.toISOString().slice(0, 7)
+      
+      const monthVouchers = userVouchers.filter(v => 
+        v.createdAt.startsWith(monthYear)
+      )
+      
+      const revenue = monthVouchers
+        .filter(v => v.isUsed)
+        .reduce((sum, v) => sum + (v.price || 0), 0)
+      
+      monthlyRevenue.push({
+        month: monthYear,
+        revenue,
+        count: monthVouchers.length
+      })
     }
+
+    const stats = {
+      totalRouters: db.routers.filter(r => r.companyId === req.user.id).length,
+      activeRouters: db.routers.filter(r => r.companyId === req.user.id && r.status === 'online').length,
+      totalVouchers: userVouchers.length,
+      usedVouchers: userVouchers.filter(v => v.isUsed).length,
+      unusedVouchers: userVouchers.filter(v => !v.isUsed).length,
+      revenue: userVouchers.filter(v => v.isUsed).reduce((sum, v) => sum + (v.price || 0), 0),
+      totalBackgrounds: userBackgrounds.length,
+      totalPrintCards: userPrintCards.length,
+      totalHotspotPages: userHotspotPages.length,
+      activeHotspotPages: userHotspotPages.filter(h => h.isActive).length,
+      totalFingerprintDevices: userFingerprintDevices.length,
+      activeFingerprintDevices: userFingerprintDevices.filter(f => f.status === 'online').length,
+      totalDVRCameras: userCameras.length,
+      activeDVRCameras: userCameras.filter(c => c.status === 'online').length,
+      monthlyRevenue,
+      recentActivity,
+      systemHealth: {
+        status: 'excellent',
+        uptime: process.uptime(),
+        lastBackup: new Date().toISOString()
+      }
+    }
+
+    res.json({ success: true, data: stats })
+  } catch (error) {
+    console.error('Dashboard error:', error)
+    res.status(500).json({ error: 'Failed to get dashboard data' })
   }
-  
-  res.json({ success: true, data: stats })
 })
 
 // ==================== ROUTERS ====================
@@ -362,132 +380,151 @@ app.get('/api/routers', authenticateToken, (req, res) => {
   res.json({ success: true, data: userRouters })
 })
 
-// مسار الاتصال المباشر بالميكروتيك - (تم التحديث للمكتبة الجديدة node-routeros)
-app.post('/api/routers/live-stats', authenticateToken, async (req, res) => {
-  const { ipAddress, port, username, password } = req.body;
-
-  if (!ipAddress || !username) {
-    return res.status(400).json({ 
-      error: 'البيانات غير مكتملة للاتصال بالراوتر',
-      success: false 
-    });
-  }
-
-  try {
-    const conn = new RouterOSAPI({
-      host: ipAddress,
-      user: username,
-      password: password || '',
-      port: port || 8728,
-      timeout: 5
-    });
-
-    await conn.connect();
-
-    // جلب البيانات باستخدام أوامر الميكروتيك الفعلية للمكتبة الجديدة
-    const hotspotUsers = await conn.write('/ip/hotspot/active/print');
-    const pppoeUsers = await conn.write('/ppp/active/print');
-    const resources = await conn.write('/system/resource/print');
-
-    conn.close();
-
-    res.json({
-      success: true,
-      data: {
-        hotspotActiveCount: hotspotUsers.length || 0,
-        pppoeActiveCount: pppoeUsers.length || 0,
-        cpuLoad: resources[0] && resources[0]['cpu-load'] ? `${resources[0]['cpu-load']}%` : '0%',
-      }
-    });
-
-  } catch (error) {
-    console.error("MikroTik Connection Error:", error.message);
-    res.status(500).json({ 
-      error: 'فشل الاتصال بالراوتر، تأكد من صحة الـ IP وتفعيل الـ API في الراوتر.',
-      success: false 
-    });
-  }
-});
-
 app.post('/api/routers', authenticateToken, async (req, res) => {
   try {
-    const { name, ipAddress, macAddress, status, location, username, password, port } = req.body
-    
-    if (!name) {
-      return res.status(400).json({ error: 'Router name required', success: false })
-    }
+    const { name, ipAddress, port, username, password, location, macAddress } = req.body
     
     const router = {
       id: uuidv4(),
       name,
-      ipAddress: ipAddress || '',
-      macAddress: macAddress || '',
-      status: status || 'offline',
-      location: location || '',
-      username: username || 'admin',
-      password: password || '',
+      ipAddress,
       port: port || 8728,
+      username: username || 'admin',
+      password,
+      location: location || '',
+      macAddress: macAddress || '',
+      status: 'offline',
       companyId: req.user.id,
-      lastSeen: new Date().toISOString(),
+      lastSeen: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
-    
+
     db.routers.push(router)
     saveDB()
-    
-    logActivity(req.user.id, 'ROUTER_CREATED', { routerId: router.id, name })
-    
-    res.json({ success: true, message: 'Router added successfully', data: router })
+
+    logActivity(req.user.id, 'ROUTER_CREATED', { name: router.name, ip: router.ipAddress })
+
+    res.json({ success: true, data: router })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to add router', success: false })
+    console.error('Router creation error:', error)
+    res.status(500).json({ error: 'Failed to create router' })
   }
 })
 
-app.put('/api/routers/:id', authenticateToken, async (req, res) => {
+app.put('/api/routers/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const routerIndex = db.routers.findIndex(r => r.id === id && r.companyId === req.user.id)
+    const router = db.routers.find(r => r.id === id && r.companyId === req.user.id)
     
-    if (routerIndex === -1) {
-      return res.status(404).json({ error: 'Router not found', success: false })
+    if (!router) {
+      return res.status(404).json({ error: 'Router not found' })
     }
+
+    const updates = { ...req.body, updatedAt: new Date().toISOString() }
+    Object.assign(router, updates)
+    saveDB()
+
+    logActivity(req.user.id, 'ROUTER_UPDATED', { name: router.name, ip: router.ipAddress })
+
+    res.json({ success: true, data: router })
+  } catch (error) {
+    console.error('Router update error:', error)
+    res.status(500).json({ error: 'Failed to update router' })
+  }
+})
+
+app.delete('/api/routers/:id', authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params
+    const index = db.routers.findIndex(r => r.id === id && r.companyId === req.user.id)
     
-    const allowedFields = ['name', 'ipAddress', 'macAddress', 'status', 'location', 'username', 'password', 'port']
-    allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) {
-        db.routers[routerIndex][field] = req.body[field]
+    if (index === -1) {
+      return res.status(404).json({ error: 'Router not found' })
+    }
+
+    const router = db.routers[index]
+    db.routers.splice(index, 1)
+    saveDB()
+
+    logActivity(req.user.id, 'ROUTER_DELETED', { name: router.name, ip: router.ipAddress })
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Router deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete router' })
+  }
+})
+
+// Test router connection
+app.post('/api/routers/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ error: 'Router IP address is required' })
+    }
+
+    const api = new RouterOSAPI({
+      host: ipAddress,
+      port: port || 8728,
+      user: username || 'admin',
+      password: password
+    })
+
+    await api.connect()
+    await api.close()
+
+    res.json({ success: true, message: 'Connection successful' })
+  } catch (error) {
+    console.error('Router connection test error:', error)
+    res.status(500).json({ error: 'Connection failed: ' + error.message })
+  }
+})
+
+// Get router live statistics
+app.post('/api/routers/live-stats', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password } = req.body
+    
+    if (!ipAddress) {
+      return res.status(400).json({ error: 'Router IP address is required' })
+    }
+
+    const api = new RouterOSAPI({
+      host: ipAddress,
+      port: port || 8728,
+      user: username || 'admin',
+      password: password
+    })
+
+    await api.connect()
+    
+    // Get hotspot active users
+    const hotspotUsers = await api.write('/ip/hotspot/active/print')
+    const hotspotActiveCount = Array.isArray(hotspotUsers) ? hotspotUsers.length : 0
+
+    // Get PPPoE active connections
+    const pppoeConnections = await api.write('/interface/pppoe-client/print')
+    const pppoeActiveCount = Array.isArray(pppoeConnections) ? pppoeConnections.filter(c => c['running'] === 'true').length : 0
+
+    // Get system resource
+    const systemResource = await api.write('/system/resource/print')
+    const cpuLoad = systemResource && systemResource[0] && systemResource[0]['cpu-load'] ? parseInt(systemResource[0]['cpu-load']) : 0
+
+    await api.close()
+
+    res.json({
+      success: true,
+      data: {
+        hotspotActiveCount,
+        pppoeActiveCount,
+        cpuLoad
       }
     })
-    
-    db.routers[routerIndex].updatedAt = new Date().toISOString()
-    saveDB()
-    
-    logActivity(req.user.id, 'ROUTER_UPDATED', { routerId: id })
-    
-    res.json({ success: true, message: 'Router updated', data: db.routers[routerIndex] })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update router', success: false })
-  }
-})
-
-app.delete('/api/routers/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params
-    const routerIndex = db.routers.findIndex(r => r.id === id && r.companyId === req.user.id)
-    
-    if (routerIndex === -1) {
-      return res.status(404).json({ error: 'Router not found', success: false })
-    }
-    
-    db.routers.splice(routerIndex, 1)
-    saveDB()
-    
-    logActivity(req.user.id, 'ROUTER_DELETED', { routerId: id })
-    
-    res.json({ success: true, message: 'Router deleted' })
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete router', success: false })
+    console.error('Router live stats error:', error)
+    res.status(500).json({ error: 'Failed to get live stats: ' + error.message })
   }
 })
 
@@ -500,50 +537,37 @@ app.get('/api/vouchers', authenticateToken, (req, res) => {
 
 app.post('/api/vouchers', authenticateToken, async (req, res) => {
   try {
-    const { code, duration, dataLimit, speedLimit, price, quantity } = req.body
-    
-    if (!code) {
-      return res.status(400).json({ error: 'Voucher code required', success: false })
-    }
-    
+    const { quantity = 1, ...voucherData } = req.body
     const vouchers = []
-    const qty = quantity || 1
     
-    for (let i = 0; i < qty; i++) {
-      const voucherCode = quantity > 1 ? `${code}-${String(i + 1).padStart(3, '0')}` : code
-      
-      const exists = db.vouchers.find(v => v.code === voucherCode)
-      if (exists) continue
-      
+    for (let i = 0; i < quantity; i++) {
       const voucher = {
         id: uuidv4(),
-        code: voucherCode,
-        duration: duration || 0,
-        dataLimit: dataLimit || 0,
-        speedLimit: speedLimit || '',
-        price: price || 0,
+        code: Math.random().toString(36).substring(2, 10).toUpperCase(),
+        duration: voucherData.duration || '1h',
+        dataLimit: voucherData.dataLimit || 0,
+        speedLimit: voucherData.speedLimit || 0,
+        price: voucherData.price || 0,
         isUsed: false,
         usedBy: '',
         usedAt: null,
         companyId: req.user.id,
         createdAt: new Date().toISOString(),
-        expiresAt: duration ? new Date(Date.now() + (duration * 24 * 60 * 60 * 1000)).toISOString() : null
+        expiresAt: new Date(Date.now() + (voucherData.durationHours || 24) * 60 * 60 * 1000).toISOString()
       }
+      
       vouchers.push(voucher)
+      db.vouchers.push(voucher)
     }
-    
-    db.vouchers.push(...vouchers)
+
     saveDB()
-    
-    logActivity(req.user.id, 'VOUCHERS_CREATED', { count: vouchers.length })
-    
-    res.json({ 
-      success: true, 
-      message: `Created ${vouchers.length} voucher(s)`,
-      data: vouchers.length === 1 ? vouchers[0] : vouchers
-    })
+
+    logActivity(req.user.id, 'VOUCHERS_CREATED', { quantity, code: vouchers[0].code })
+
+    res.json({ success: true, data: quantity === 1 ? vouchers[0] : vouchers })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create voucher', success: false })
+    console.error('Voucher creation error:', error)
+    res.status(500).json({ error: 'Failed to create vouchers' })
   }
 })
 
@@ -602,197 +626,219 @@ app.get('/api/backgrounds', authenticateToken, (req, res) => {
   res.json({ success: true, data: userBackgrounds })
 })
 
-app.post('/api/backgrounds', authenticateToken, async (req, res) => {
+app.post('/api/backgrounds', authenticateToken, (req, res) => {
   try {
     const { name, imageUrl, category, isDefault } = req.body
-    
-    if (!name || !imageUrl) {
-      return res.status(400).json({ error: 'Name and image URL required', success: false })
-    }
     
     const background = {
       id: uuidv4(),
       name,
       imageUrl,
-      category: category || 'general',
+      category: category || 'default',
       isDefault: isDefault || false,
       companyId: req.user.id,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
-    
+
     db.backgrounds.push(background)
     saveDB()
-    
-    logActivity(req.user.id, 'BACKGROUND_CREATED', { backgroundId: background.id })
-    
-    res.json({ success: true, message: 'Background added', data: background })
+
+    logActivity(req.user.id, 'BACKGROUND_CREATED', { name: background.name })
+
+    res.json({ success: true, data: background })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to add background', success: false })
+    console.error('Background creation error:', error)
+    res.status(500).json({ error: 'Failed to create background' })
   }
 })
 
-app.put('/api/backgrounds/:id', authenticateToken, async (req, res) => {
+app.put('/api/backgrounds/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const bgIndex = db.backgrounds.findIndex(b => b.id === id && b.companyId === req.user.id)
+    const background = db.backgrounds.find(b => b.id === id && b.companyId === req.user.id)
     
-    if (bgIndex === -1) {
-      return res.status(404).json({ error: 'Background not found', success: false })
+    if (!background) {
+      return res.status(404).json({ error: 'Background not found' })
     }
-    
-    const allowedFields = ['name', 'imageUrl', 'category', 'isDefault']
-    allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) {
-        db.backgrounds[bgIndex][field] = req.body[field]
-      }
-    })
-    
-    db.backgrounds[bgIndex].updatedAt = new Date().toISOString()
+
+    const updates = { ...req.body, updatedAt: new Date().toISOString() }
+    Object.assign(background, updates)
     saveDB()
-    
-    res.json({ success: true, message: 'Background updated', data: db.backgrounds[bgIndex] })
+
+    logActivity(req.user.id, 'BACKGROUND_UPDATED', { name: background.name })
+
+    res.json({ success: true, data: background })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update background', success: false })
+    console.error('Background update error:', error)
+    res.status(500).json({ error: 'Failed to update background' })
   }
 })
 
-app.delete('/api/backgrounds/:id', authenticateToken, async (req, res) => {
+app.delete('/api/backgrounds/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const bgIndex = db.backgrounds.findIndex(b => b.id === id && b.companyId === req.user.id)
+    const index = db.backgrounds.findIndex(b => b.id === id && b.companyId === req.user.id)
     
-    if (bgIndex === -1) {
-      return res.status(404).json({ error: 'Background not found', success: false })
+    if (index === -1) {
+      return res.status(404).json({ error: 'Background not found' })
     }
-    
-    db.backgrounds.splice(bgIndex, 1)
+
+    const background = db.backgrounds[index]
+    db.backgrounds.splice(index, 1)
     saveDB()
-    
-    res.json({ success: true, message: 'Background deleted' })
+
+    logActivity(req.user.id, 'BACKGROUND_DELETED', { name: background.name })
+
+    res.json({ success: true })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete background', success: false })
+    console.error('Background deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete background' })
   }
 })
 
 // ==================== PRINT CARDS ====================
 
 app.get('/api/print-cards', authenticateToken, (req, res) => {
-  const userCards = db.printCards.filter(c => c.companyId === req.user.id)
-  res.json({ success: true, data: userCards })
+  const userPrintCards = db.printCards.filter(p => p.companyId === req.user.id)
+  res.json({ success: true, data: userPrintCards })
 })
 
-app.post('/api/print-cards', authenticateToken, async (req, res) => {
+app.post('/api/print-cards', authenticateToken, (req, res) => {
   try {
-    const { title, template, voucherCode, duration, dataLimit, speedLimit, price,
-            logoUrl, primaryColor, secondaryColor, fontFamily, showLogo, showQR, notes } = req.body
-    
-    if (!title || !template) {
-      return res.status(400).json({ error: 'Title and template required', success: false })
-    }
+    const { title, template, voucherCode, duration, dataLimit, speedLimit, price, logoUrl, primaryColor, secondaryColor, fontFamily, showLogo, showQR, notes } = req.body
     
     const printCard = {
       id: uuidv4(),
       title,
-      template,
+      template: template || 'default',
       voucherCode: voucherCode || '',
-      duration: duration || 0,
+      duration: duration || '1h',
       dataLimit: dataLimit || 0,
-      speedLimit: speedLimit || '',
+      speedLimit: speedLimit || 0,
       price: price || 0,
       logoUrl: logoUrl || '',
-      primaryColor: primaryColor || '#3b82f6',
-      secondaryColor: secondaryColor || '#8b5cf6',
-      fontFamily: fontFamily || 'Tajawal',
-      showLogo: showLogo !== undefined ? showLogo : true,
-      showQR: showQR !== undefined ? showQR : true,
+      primaryColor: primaryColor || '#3B82F6',
+      secondaryColor: secondaryColor || '#1E40AF',
+      fontFamily: fontFamily || 'Arial',
+      showLogo: showLogo !== false,
+      showQR: showQR !== false,
       notes: notes || '',
       printCount: 0,
+      lastPrintedAt: null,
       companyId: req.user.id,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
-    
+
     db.printCards.push(printCard)
     saveDB()
-    
-    res.json({ success: true, message: 'Print card created', data: printCard })
+
+    logActivity(req.user.id, 'PRINT_CARD_CREATED', { title: printCard.title })
+
+    res.json({ success: true, data: printCard })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create print card', success: false })
+    console.error('Print card creation error:', error)
+    res.status(500).json({ error: 'Failed to create print card' })
   }
 })
 
-app.put('/api/print-cards/:id/print', authenticateToken, async (req, res) => {
+app.put('/api/print-cards/:id/print', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const cardIndex = db.printCards.findIndex(c => c.id === id && c.companyId === req.user.id)
+    const printCard = db.printCards.find(p => p.id === id && p.companyId === req.user.id)
     
-    if (cardIndex === -1) {
-      return res.status(404).json({ error: 'Print card not found', success: false })
+    if (!printCard) {
+      return res.status(404).json({ error: 'Print card not found' })
     }
-    
-    db.printCards[cardIndex].printCount = (db.printCards[cardIndex].printCount || 0) + 1
-    db.printCards[cardIndex].lastPrintedAt = new Date().toISOString()
+
+    printCard.printCount = (printCard.printCount || 0) + 1
+    printCard.lastPrintedAt = new Date().toISOString()
     saveDB()
-    
-    res.json({ success: true, message: 'Print count updated', data: db.printCards[cardIndex] })
+
+    logActivity(req.user.id, 'PRINT_CARD_PRINTED', { title: printCard.title })
+
+    res.json({ success: true, data: printCard })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update print count', success: false })
+    console.error('Print card print error:', error)
+    res.status(500).json({ error: 'Failed to print card' })
   }
 })
 
-app.delete('/api/print-cards/:id', authenticateToken, async (req, res) => {
+app.put('/api/print-cards/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const cardIndex = db.printCards.findIndex(c => c.id === id && c.companyId === req.user.id)
+    const printCard = db.printCards.find(p => p.id === id && p.companyId === req.user.id)
     
-    if (cardIndex === -1) {
-      return res.status(404).json({ error: 'Print card not found', success: false })
+    if (!printCard) {
+      return res.status(404).json({ error: 'Print card not found' })
     }
-    
-    db.printCards.splice(cardIndex, 1)
+
+    const updates = { ...req.body, updatedAt: new Date().toISOString() }
+    Object.assign(printCard, updates)
     saveDB()
-    
-    res.json({ success: true, message: 'Print card deleted' })
+
+    logActivity(req.user.id, 'PRINT_CARD_UPDATED', { title: printCard.title })
+
+    res.json({ success: true, data: printCard })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete print card', success: false })
+    console.error('Print card update error:', error)
+    res.status(500).json({ error: 'Failed to update print card' })
+  }
+})
+
+app.delete('/api/print-cards/:id', authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params
+    const index = db.printCards.findIndex(p => p.id === id && p.companyId === req.user.id)
+    
+    if (index === -1) {
+      return res.status(404).json({ error: 'Print card not found' })
+    }
+
+    const printCard = db.printCards[index]
+    db.printCards.splice(index, 1)
+    saveDB()
+
+    logActivity(req.user.id, 'PRINT_CARD_DELETED', { title: printCard.title })
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Print card deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete print card' })
   }
 })
 
 // ==================== HOTSPOT PAGES ====================
 
 app.get('/api/hotspot-pages', authenticateToken, (req, res) => {
-  const userPages = db.hotspotPages.filter(p => p.companyId === req.user.id)
-  res.json({ success: true, data: userPages })
+  const userHotspotPages = db.hotspotPages.filter(h => h.companyId === req.user.id)
+  res.json({ success: true, data: userHotspotPages })
 })
 
-app.get('/api/hotspot-pages/:id/public', async (req, res) => {
+app.get('/api/hotspot-pages/:id/public', (req, res) => {
   try {
     const { id } = req.params
-    const page = db.hotspotPages.find(p => p.id === id && p.isActive)
+    const hotspotPage = db.hotspotPages.find(h => h.id === id && h.isActive)
     
-    if (!page) {
-      return res.status(404).json({ error: 'Page not found', success: false })
+    if (!hotspotPage) {
+      return res.status(404).json({ error: 'Hotspot page not found or inactive' })
     }
-    
-    page.viewCount = (page.viewCount || 0) + 1
-    page.lastViewedAt = new Date().toISOString()
+
+    hotspotPage.viewCount = (hotspotPage.viewCount || 0) + 1
+    hotspotPage.lastViewedAt = new Date().toISOString()
     saveDB()
-    
-    res.json({ success: true, data: page })
+
+    res.json({ success: true, data: hotspotPage })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to get page', success: false })
+    console.error('Hotspot page fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch hotspot page' })
   }
 })
 
-app.post('/api/hotspot-pages', authenticateToken, async (req, res) => {
+app.post('/api/hotspot-pages', authenticateToken, (req, res) => {
   try {
-    const { name, title, subtitle, backgroundImage, backgroundColor, logoUrl,
-            welcomeMessage, instructions, termsText, showTerms, showLogo,
-            showVoucherInput, showPhoneInput, primaryColor, secondaryColor,
-            fontFamily, buttonText, footerText, isActive } = req.body
-    
-    if (!name || !title) {
-      return res.status(400).json({ error: 'Name and title required', success: false })
-    }
+    const { name, title, subtitle, backgroundImage, backgroundColor, logoUrl, welcomeMessage, instructions, termsText, showTerms, showLogo, showVoucherInput, showPhoneInput, primaryColor, secondaryColor, fontFamily, buttonText, footerText, isActive } = req.body
     
     const hotspotPage = {
       id: uuidv4(),
@@ -800,192 +846,81 @@ app.post('/api/hotspot-pages', authenticateToken, async (req, res) => {
       title,
       subtitle: subtitle || '',
       backgroundImage: backgroundImage || '',
-      backgroundColor: backgroundColor || '#0f172a',
+      backgroundColor: backgroundColor || '#ffffff',
       logoUrl: logoUrl || '',
-      welcomeMessage: welcomeMessage || 'مرحباً بك في شبكتنا',
-      instructions: instructions || 'أدخل كود القسيمة للاتصال',
-      termsText: termsText || 'باستخدامك لهذه الخدمة، فإنك توافق على الشروط والأحكام',
-      showTerms: showTerms !== undefined ? showTerms : true,
-      showLogo: showLogo !== undefined ? showLogo : true,
-      showVoucherInput: showVoucherInput !== undefined ? showVoucherInput : true,
-      showPhoneInput: showPhoneInput !== undefined ? showPhoneInput : false,
-      primaryColor: primaryColor || '#3b82f6',
-      secondaryColor: secondaryColor || '#8b5cf6',
-      fontFamily: fontFamily || 'Tajawal',
-      buttonText: buttonText || 'اتصل الآن',
-      footerText: footerText || '',
-      isActive: isActive !== undefined ? isActive : true,
+      welcomeMessage: welcomeMessage || 'Welcome to our WiFi service',
+      instructions: instructions || 'Please enter your voucher code to access the internet',
+      termsText: termsText || 'By using this service, you agree to our terms and conditions.',
+      showTerms: showTerms !== false,
+      showLogo: showLogo !== false,
+      showVoucherInput: showVoucherInput !== false,
+      showPhoneInput: showPhoneInput !== false,
+      primaryColor: primaryColor || '#3B82F6',
+      secondaryColor: secondaryColor || '#1E40AF',
+      fontFamily: fontFamily || 'Arial',
+      buttonText: buttonText || 'Connect',
+      footerText: footerText || 'Powered by Sira Software',
+      isActive: isActive !== false,
       viewCount: 0,
+      lastViewedAt: null,
       companyId: req.user.id,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
-    
+
     db.hotspotPages.push(hotspotPage)
     saveDB()
-    
-    res.json({ success: true, message: 'Hotspot page created', data: hotspotPage })
+
+    logActivity(req.user.id, 'HOTSPOT_PAGE_CREATED', { name: hotspotPage.name })
+
+    res.json({ success: true, data: hotspotPage })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create hotspot page', success: false })
+    console.error('Hotspot page creation error:', error)
+    res.status(500).json({ error: 'Failed to create hotspot page' })
   }
 })
 
-app.put('/api/hotspot-pages/:id', authenticateToken, async (req, res) => {
+app.put('/api/hotspot-pages/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const pageIndex = db.hotspotPages.findIndex(p => p.id === id && p.companyId === req.user.id)
+    const hotspotPage = db.hotspotPages.find(h => h.id === id && h.companyId === req.user.id)
     
-    if (pageIndex === -1) {
-      return res.status(404).json({ error: 'Hotspot page not found', success: false })
+    if (!hotspotPage) {
+      return res.status(404).json({ error: 'Hotspot page not found' })
     }
-    
-    const allowedFields = ['name', 'title', 'subtitle', 'backgroundImage', 'backgroundColor',
-      'logoUrl', 'welcomeMessage', 'instructions', 'termsText', 'showTerms', 'showLogo',
-      'showVoucherInput', 'showPhoneInput', 'primaryColor', 'secondaryColor', 'fontFamily',
-      'buttonText', 'footerText', 'isActive']
-    
-    allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) {
-        db.hotspotPages[pageIndex][field] = req.body[field]
-      }
-    })
-    
-    db.hotspotPages[pageIndex].updatedAt = new Date().toISOString()
+
+    const updates = { ...req.body, updatedAt: new Date().toISOString() }
+    Object.assign(hotspotPage, updates)
     saveDB()
-    
-    res.json({ success: true, message: 'Hotspot page updated', data: db.hotspotPages[pageIndex] })
+
+    logActivity(req.user.id, 'HOTSPOT_PAGE_UPDATED', { name: hotspotPage.name })
+
+    res.json({ success: true, data: hotspotPage })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update hotspot page', success: false })
+    console.error('Hotspot page update error:', error)
+    res.status(500).json({ error: 'Failed to update hotspot page' })
   }
 })
 
-app.delete('/api/hotspot-pages/:id', authenticateToken, async (req, res) => {
+app.delete('/api/hotspot-pages/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const pageIndex = db.hotspotPages.findIndex(p => p.id === id && p.companyId === req.user.id)
+    const index = db.hotspotPages.findIndex(h => h.id === id && h.companyId === req.user.id)
     
-    if (pageIndex === -1) {
-      return res.status(404).json({ error: 'Hotspot page not found', success: false })
+    if (index === -1) {
+      return res.status(404).json({ error: 'Hotspot page not found' })
     }
-    
-    db.hotspotPages.splice(pageIndex, 1)
+
+    const hotspotPage = db.hotspotPages[index]
+    db.hotspotPages.splice(index, 1)
     saveDB()
-    
-    res.json({ success: true, message: 'Hotspot page deleted' })
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete hotspot page', success: false })
-  }
-})
 
-// ==================== MIKROTIK LIVE STATS ====================
+    logActivity(req.user.id, 'HOTSPOT_PAGE_DELETED', { name: hotspotPage.name })
 
-app.post('/api/routers/live-stats', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password } = req.body
-    
-    if (!ipAddress || !username) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Router IP address and username are required' 
-      })
-    }
-    
-    console.log(`📡 Fetching live stats from MikroTik: ${ipAddress}:${port || 8728}`)
-    
-    // Use MikroTik Manager to get live statistics
-    const result = await MikroTikManager.getLiveStats(
-      ipAddress,
-      username,
-      password || '',
-      port || 8728
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully fetched stats from ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to fetch stats from ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
+    res.json({ success: true })
   } catch (error) {
-    console.error('❌ Error fetching MikroTik stats:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Test MikroTik connection
-app.post('/api/routers/test-connection', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password } = req.body
-    
-    if (!ipAddress || !username) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Router IP address and username are required' 
-      })
-    }
-    
-    console.log(`🧪 Testing connection to MikroTik: ${ipAddress}:${port || 8728}`)
-    
-    const result = await MikroTikManager.testConnection(
-      ipAddress,
-      username,
-      password || '',
-      port || 8728
-    )
-    
-    if (result.success) {
-      console.log(`✅ Connection test successful for ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Connection test failed for ${ipAddress}:`, result.error)
-      res.status(400).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error testing MikroTik connection:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get router system information
-app.post('/api/routers/system-info', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password } = req.body
-    
-    if (!ipAddress || !username) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Router IP address and username are required' 
-      })
-    }
-    
-    console.log(`ℹ️  Fetching system info from MikroTik: ${ipAddress}:${port || 8728}`)
-    
-    const result = await MikroTikManager.getSystemInfo(
-      ipAddress,
-      username,
-      password || '',
-      port || 8728
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully fetched system info from ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to fetch system info from ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error fetching MikroTik system info:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
+    console.error('Hotspot page deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete hotspot page' })
   }
 })
 
@@ -996,7 +931,7 @@ app.get('/api/fingerprint', authenticateToken, (req, res) => {
   res.json({ success: true, data: userDevices })
 })
 
-app.post('/api/fingerprint', authenticateToken, async (req, res) => {
+app.post('/api/fingerprint', authenticateToken, (req, res) => {
   try {
     const { name, ipAddress, port, model, serialNumber, location } = req.body
     const device = {
@@ -1005,208 +940,51 @@ app.post('/api/fingerprint', authenticateToken, async (req, res) => {
       ipAddress,
       port: port || 4370,
       status: 'offline',
-      model,
-      serialNumber,
-      location,
+      model: model || 'ZKTeco',
+      serialNumber: serialNumber || '',
+      location: location || '',
       totalUsers: 0,
+      lastSync: null,
       companyId: req.user.id,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
+
     db.fingerprintDevices.push(device)
     saveDB()
+
+    logActivity(req.user.id, 'FINGERPRINT_DEVICE_CREATED', { name: device.name, ip: device.ipAddress })
+
     res.json({ success: true, data: device })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create device', success: false })
+    console.error('Fingerprint device creation error:', error)
+    res.status(500).json({ error: 'Failed to create fingerprint device' })
   }
 })
 
-// ==================== FINGERPRINT DEVICES ====================
-
-app.get('/api/fingerprint', authenticateToken, (req, res) => {
-  const userDevices = db.fingerprintDevices.filter(d => d.companyId === req.user.id)
-  res.json({ success: true, data: userDevices })
-})
-
-app.post('/api/fingerprint', authenticateToken, async (req, res) => {
-  try {
-    const { name, ipAddress, port, model, serialNumber, location } = req.body
-    const device = {
-      id: uuidv4(),
-      name,
-      ipAddress,
-      port: port || 4370,
-      status: 'offline',
-      model,
-      serialNumber,
-      location,
-      totalUsers: 0,
-      companyId: req.user.id,
-      createdAt: new Date().toISOString()
-    }
-    db.fingerprintDevices.push(device)
-    saveDB()
-    res.json({ success: true, data: device })
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create device', success: false })
-  }
-})
-
-// Test fingerprint device connection
-app.post('/api/fingerprint/test-connection', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Device IP address is required' 
-      })
-    }
-    
-    console.log(`🧪 Testing connection to fingerprint device: ${ipAddress}:${port || 4370}`)
-    
-    const result = await FingerprintManager.testConnection(
-      ipAddress,
-      port || 4370
-    )
-    
-    if (result.success) {
-      console.log(`✅ Connection test successful for fingerprint device ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Connection test failed for fingerprint device ${ipAddress}:`, result.error)
-      res.status(400).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error testing fingerprint connection:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get fingerprint device info
-app.post('/api/fingerprint/device-info', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Device IP address is required' 
-      })
-    }
-    
-    console.log(`ℹ️  Fetching device info from fingerprint device: ${ipAddress}:${port || 4370}`)
-    
-    const result = await FingerprintManager.getDeviceInfo(
-      ipAddress,
-      port || 4370
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully fetched device info from ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to fetch device info from ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error fetching fingerprint device info:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get fingerprint device users
-app.post('/api/fingerprint/users', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Device IP address is required' 
-      })
-    }
-    
-    console.log(`👥 Fetching users from fingerprint device: ${ipAddress}:${port || 4370}`)
-    
-    const result = await FingerprintManager.getUsers(
-      ipAddress,
-      port || 4370
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully fetched users from ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to fetch users from ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error fetching fingerprint users:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get fingerprint attendance records
-app.post('/api/fingerprint/attendance', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, startDate, endDate } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Device IP address is required' 
-      })
-    }
-    
-    console.log(`📋 Fetching attendance from fingerprint device: ${ipAddress}:${port || 4370}`)
-    
-    const result = await FingerprintManager.getAttendance(
-      ipAddress,
-      port || 4370,
-      startDate,
-      endDate
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully fetched attendance from ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to fetch attendance from ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error fetching fingerprint attendance:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-app.put('/api/fingerprint/:id', authenticateToken, async (req, res) => {
+app.put('/api/fingerprint/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
-    const index = db.fingerprintDevices.findIndex(d => d.id === id && d.companyId === req.user.id)
-    if (index === -1) return res.status(404).json({ error: 'Device not found', success: false })
-    db.fingerprintDevices[index] = { ...db.fingerprintDevices[index], ...req.body, updatedAt: new Date().toISOString() }
+    const device = db.fingerprintDevices.find(d => d.id === id && d.companyId === req.user.id)
+    
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' })
+    }
+
+    const updates = { ...req.body, updatedAt: new Date().toISOString() }
+    Object.assign(device, updates)
     saveDB()
-    res.json({ success: true, data: db.fingerprintDevices[index] })
+
+    logActivity(req.user.id, 'FINGERPRINT_DEVICE_UPDATED', { name: device.name, ip: device.ipAddress })
+
+    res.json({ success: true, data: device })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update device', success: false })
+    console.error('Fingerprint device update error:', error)
+    res.status(500).json({ error: 'Failed to update device' })
   }
 })
 
-app.delete('/api/fingerprint/:id', authenticateToken, async (req, res) => {
+app.delete('/api/fingerprint/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
     const index = db.fingerprintDevices.findIndex(d => d.id === id && d.companyId === req.user.id)
@@ -1252,564 +1030,89 @@ app.post('/api/dvr', authenticateToken, async (req, res) => {
   }
 })
 
-// ==================== DVR CAMERAS ====================
-
-app.get('/api/dvr', authenticateToken, (req, res) => {
-  const userCameras = db.dvrCameras.filter(c => c.companyId === req.user.id)
-  res.json({ success: true, data: userCameras })
-})
-
-app.post('/api/dvr', authenticateToken, async (req, res) => {
+app.put('/api/dvr/:id', authenticateToken, (req, res) => {
   try {
-    const { name, ipAddress, port, model, channel, username, password, location, streamUrl } = req.body
-    const camera = {
-      id: uuidv4(),
-      name,
-      ipAddress,
-      port: port || 80,
-      status: 'offline',
-      model,
-      channel: channel || 1,
-      username: username || 'admin',
-      password,
-      location,
-      streamUrl,
-      companyId: req.user.id,
-      createdAt: new Date().toISOString()
+    const { id } = req.params
+    const camera = db.dvrCameras.find(c => c.id === id && c.companyId === req.user.id)
+    
+    if (!camera) {
+      return res.status(404).json({ error: 'Camera not found' })
     }
-    db.dvrCameras.push(camera)
+
+    const updates = { ...req.body, updatedAt: new Date().toISOString() }
+    Object.assign(camera, updates)
     saveDB()
+
     res.json({ success: true, data: camera })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create camera', success: false })
+    res.status(500).json({ error: 'Failed to update camera' })
   }
 })
 
-// Test DVR camera connection
-app.post('/api/dvr/test-connection', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password, model } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Camera IP address is required' 
-      })
-    }
-    
-    // Test connection using DVRManager
-    const testResult = await dvrManager.testConnection({
-      ipAddress,
-      port: port || 80,
-      username: username || 'admin',
-      password,
-      model: model || 'Hikvision'
-    })
-    
-    if (testResult) {
-      res.json({ 
-        success: true, 
-        message: 'Connection successful',
-        data: { status: 'online' }
-      })
-    } else {
-      res.json({ 
-        success: false, 
-        error: 'Connection failed - Check IP, port, username and password',
-        data: { status: 'offline' }
-      })
-    }
-    
-  } catch (error) {
-    console.error('DVR connection test error:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: 'Connection test failed: ' + error.message 
-    })
-  }
-})
-
-// Get camera stream URL
-app.post('/api/dvr/stream-url', authenticateToken, (req, res) => {
-  try {
-    const { cameraId, channel, quality } = req.body
-    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
-    
-    if (!camera) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Camera not found' 
-      })
-    }
-    
-    const streamUrl = dvrManager.getStreamUrl(camera, channel || 1, quality || 'main')
-    
-    res.json({ 
-      success: true, 
-      data: { streamUrl }
-    })
-    
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to get stream URL: ' + error.message 
-    })
-  }
-})
-
-// Control PTZ (Pan, Tilt, Zoom)
-app.post('/api/dvr/ptz-control', authenticateToken, async (req, res) => {
-  try {
-    const { cameraId, command, value } = req.body
-    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
-    
-    if (!camera) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Camera not found' 
-      })
-    }
-    
-    const result = await dvrManager.controlPTZ(cameraId, command, value)
-    
-    if (result.success) {
-      res.json(result)
-    } else {
-      res.status(400).json(result)
-    }
-    
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: 'PTZ control failed: ' + error.message 
-    })
-  }
-})
-
-// Start recording
-app.post('/api/dvr/start-recording', authenticateToken, async (req, res) => {
-  try {
-    const { cameraId, duration } = req.body
-    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
-    
-    if (!camera) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Camera not found' 
-      })
-    }
-    
-    const result = await dvrManager.startRecording(cameraId, duration || 3600)
-    res.json(result)
-    
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to start recording: ' + error.message 
-    })
-  }
-})
-
-// Stop recording
-app.post('/api/dvr/stop-recording', authenticateToken, async (req, res) => {
-  try {
-    const { recordingId } = req.body
-    const result = await dvrManager.stopRecording(recordingId)
-    res.json(result)
-    
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to stop recording: ' + error.message 
-    })
-  }
-})
-
-// Get camera statistics
-app.get('/api/dvr/stats', authenticateToken, (req, res) => {
-  try {
-    const userCameras = db.dvrCameras.filter(c => c.companyId === req.user.id)
-    const stats = {
-      total: userCameras.length,
-      online: userCameras.filter(c => c.status === 'online').length,
-      offline: userCameras.filter(c => c.status === 'offline').length,
-      recording: userCameras.filter(c => c.isRecording).length
-    }
-    
-    stats.onlinePercentage = stats.total > 0 ? Math.round((stats.online / stats.total) * 100) : 0
-    
-    res.json({ 
-      success: true, 
-      data: stats 
-    })
-    
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to get stats: ' + error.message 
-    })
-  }
-})
-    
-    console.log(`🧪 Testing connection to DVR camera: ${ipAddress}:${port || 80}`)
-    
-    const result = await DVRManager.testConnection(
-      ipAddress,
-      port || 80,
-      username || 'admin',
-      password || ''
-    )
-    
-    if (result.success) {
-      console.log(`✅ Connection test successful for DVR camera ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Connection test failed for DVR camera ${ipAddress}:`, result.error)
-      res.status(400).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error testing DVR connection:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get DVR camera info
-app.post('/api/dvr/device-info', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Camera IP address is required' 
-      })
-    }
-    
-    console.log(`ℹ️  Fetching device info from DVR camera: ${ipAddress}:${port || 80}`)
-    
-    const result = await DVRManager.getDeviceInfo(
-      ipAddress,
-      port || 80,
-      username || 'admin',
-      password || ''
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully fetched device info from DVR camera ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to fetch device info from DVR camera ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error fetching DVR device info:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get DVR camera stream URL
-app.post('/api/dvr/stream-url', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password, channel, protocol } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Camera IP address is required' 
-      })
-    }
-    
-    console.log(`📹 Generating stream URL for DVR camera: ${ipAddress}:${port || 80}`)
-    
-    const result = await DVRManager.getStreamUrl(
-      ipAddress,
-      port || 80,
-      username || 'admin',
-      password || '',
-      channel || 1,
-      protocol || 'rtsp'
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully generated stream URL for DVR camera ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to generate stream URL for DVR camera ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error generating DVR stream URL:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get DVR camera snapshot
-app.post('/api/dvr/snapshot', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password, channel } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Camera IP address is required' 
-      })
-    }
-    
-    console.log(`📸 Getting snapshot from DVR camera: ${ipAddress}:${port || 80}`)
-    
-    const result = await DVRManager.getSnapshot(
-      ipAddress,
-      port || 80,
-      username || 'admin',
-      password || '',
-      channel || 1
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully got snapshot from DVR camera ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to get snapshot from DVR camera ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error getting DVR snapshot:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Control camera PTZ
-app.post('/api/dvr/ptz-control', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password, channel, command } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Camera IP address is required' 
-      })
-    }
-    
-    console.log(`🎮 Controlling PTZ for DVR camera: ${ipAddress}:${port || 80}, Command: ${command || 'home'}`)
-    
-    const result = await DVRManager.controlPtz(
-      ipAddress,
-      port || 80,
-      username || 'admin',
-      password || '',
-      channel || 1,
-      command || 'home'
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully controlled PTZ for DVR camera ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to control PTZ for DVR camera ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error controlling DVR PTZ:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get motion detection status
-app.post('/api/dvr/motion-status', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password, channel } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Camera IP address is required' 
-      })
-    }
-    
-    console.log(`🚨 Getting motion status for DVR camera: ${ipAddress}:${port || 80}`)
-    
-    const result = await DVRManager.getMotionStatus(
-      ipAddress,
-      port || 80,
-      username || 'admin',
-      password || '',
-      channel || 1
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully got motion status for DVR camera ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to get motion status for DVR camera ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error getting DVR motion status:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-// Get device logs
-app.post('/api/dvr/device-logs', authenticateToken, async (req, res) => {
-  try {
-    const { ipAddress, port, username, password, limit } = req.body
-    
-    if (!ipAddress) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Camera IP address is required' 
-      })
-    }
-    
-    console.log(`📋 Getting device logs for DVR camera: ${ipAddress}:${port || 80}`)
-    
-    const result = await DVRManager.getDeviceLogs(
-      ipAddress,
-      port || 80,
-      username || 'admin',
-      password || '',
-      limit || 50
-    )
-    
-    if (result.success) {
-      console.log(`✅ Successfully got device logs for DVR camera ${ipAddress}`)
-      res.json(result)
-    } else {
-      console.error(`❌ Failed to get device logs for DVR camera ${ipAddress}:`, result.error)
-      res.status(500).json(result)
-    }
-  } catch (error) {
-    console.error('❌ Error getting DVR device logs:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: `Server error: ${error.message}` 
-    })
-  }
-})
-
-app.put('/api/dvr/:id', authenticateToken, async (req, res) => {
+app.delete('/api/dvr/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
     const index = db.dvrCameras.findIndex(c => c.id === id && c.companyId === req.user.id)
-    if (index === -1) return res.status(404).json({ error: 'Camera not found', success: false })
-    db.dvrCameras[index] = { ...db.dvrCameras[index], ...req.body, updatedAt: new Date().toISOString() }
-    saveDB()
-    res.json({ success: true, data: db.dvrCameras[index] })
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update camera', success: false })
-  }
-})
+    
+    if (index === -1) {
+      return res.status(404).json({ error: 'Camera not found' })
+    }
 
-app.delete('/api/dvr/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params
-    const index = db.dvrCameras.findIndex(c => c.id === id && c.companyId === req.user.id)
-    if (index === -1) return res.status(404).json({ error: 'Camera not found', success: false })
     db.dvrCameras.splice(index, 1)
     saveDB()
+
     res.json({ success: true })
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete camera', success: false })
+    res.status(500).json({ error: 'Failed to delete camera' })
   }
-})
-
-// ==================== HEALTH CHECK ====================
-
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Sira Software Pro API is running',
-    timestamp: new Date().toISOString(),
-    version: '2.0.0',
-    services: {
-      mikrotik: 'enabled',
-      fingerprint: 'enabled',
-      database: 'connected'
-    }
-  })
 })
 
 // ==================== ACTIVITY LOGS ====================
 
 app.get('/api/activity', authenticateToken, (req, res) => {
-  const userLogs = db.activityLogs.filter(l => l.userId === req.user.id).slice(0, 50)
-  res.json({ success: true, data: userLogs })
-})
-
-// ==================== SETTINGS ====================
-
-app.get('/api/settings', authenticateToken, (req, res) => {
-  const userSettings = db.settings[req.user.id] || {}
-  res.json({ success: true, data: userSettings })
-})
-
-app.put('/api/settings', authenticateToken, (req, res) => {
-  db.settings[req.user.id] = { ...db.settings[req.user.id], ...req.body }
-  saveDB()
-  res.json({ success: true, data: db.settings[req.user.id] })
-})
-
-// ==================== START SERVER ====================
-
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log('')
-  console.log('╔════════════════════════════════════════════════════════════╗')
-  console.log('║            🚀 SIRA SOFTWARE PRO v2.0.0 🚀                  ║')
-  console.log('║       Advanced Network Management & Hotspot Billing        ║')
-  console.log('╠════════════════════════════════════════════════════════════╣')
-  console.log(`║  📡 Server: http://0.0.0.0:${PORT}                             ║`)
-  console.log(`║  🔐 Admin: admin@sira.software / admin123                  ║`)
-  console.log(`║  🌍 Environment: ${process.env.NODE_ENV || 'development'}                             ║`)
-  console.log(`║  ⏰ Started: ${new Date().toLocaleString()}                     ║`)
-  console.log('╚════════════════════════════════════════════════════════════╝')
-  console.log('')
-})
-
-// Catch-all route for SPA
-app.get('*', (req, res) => {
-  const indexPath = join(__dirname, '../dist/index.html')
-  const publicIndexPath = join(__dirname, '../public/index.html')
+  const userActivity = db.activityLogs
+    .filter(log => log.userId === req.user.id)
+    .slice(0, 50)
   
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath)
-  } else if (fs.existsSync(publicIndexPath)) {
-    res.sendFile(publicIndexPath)
-  } else {
-    res.status(404).send('Frontend not built yet')
-  }
+  res.json({ success: true, data: userActivity })
 })
 
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('📴 SIGTERM received, shutting down gracefully...')
-  server.close(() => {
-    console.log('✅ Server closed')
-    process.exit(0)
+// ==================== HEALTH CHECK ====================
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Sira Software API is running',
+    timestamp: new Date().toISOString(),
+    version: '2.0.0'
   })
+})
+
+// ==================== INITIALIZATION ====================
+
+// Initialize admin user
+initAdmin().then(() => {
+  // Start server
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n╔══════════════════════════════════════════════════════════════╗`)
+    console.log(`║                    SIRA SOFTWARE PRO                        ║`)
+    console.log(`║============================================================║`)
+    console.log(`║ 🚀 Server running on: http://0.0.0.0:${PORT}`)
+    console.log(`║ 🔗 API URL: http://localhost:${PORT}`)
+    console.log(`║ 💻 Admin Login: admin@sira.software / admin123`)
+    console.log(`║ 📝 Version: 2.0.0`)
+    console.log(`║ 📍 Environment: ${process.env.NODE_ENV || 'development'}`)
+    console.log(`╚══════════════════════════════════════════════════════════════╝\n`)
+  })
+})
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully')
+  process.exit(0)
 })
 
 process.on('SIGINT', () => {
-  console.log('📴 SIGINT received, shutting down gracefully...')
-  server.close(() => {
-    console.log('✅ Server closed')
-    process.exit(0)
-  })
+  console.log('SIGINT received, shutting down gracefully')
+  process.exit(0)
 })

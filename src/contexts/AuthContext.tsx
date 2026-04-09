@@ -9,7 +9,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<ApiResponse<{ token: string; user: User }>>;
   logout: () => void;
-  register: (data: { email: string; password: string; name: string; companyName?: string; phone?: string }) => Promise<ApiResponse<null>>;
+  register: (data: { email: string; password: string; name: string; companyName?: string; phone?: string }) => Promise<ApiResponse<{ token: string; user: User }>>;
   refreshUser: () => void;
 }
 
@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (credentials: LoginCredentials): Promise<ApiResponse<{ token: string; user: User }>> => {
     try {
-      const result = await authApi.login(credentials);
+      const result = await authApi.login(credentials.email, credentials.password);
 
       if (result.success && result.data) {
         const { token: newToken, user: newUser } = result.data;
@@ -70,9 +70,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (registerData: { email: string; password: string; name: string; companyName?: string; phone?: string }): Promise<ApiResponse<null>> => {
+  const register = async (registerData: { email: string; password: string; name: string; companyName?: string; phone?: string }): Promise<ApiResponse<{ token: string; user: User }>> => {
     try {
-      return await authApi.register(registerData);
+      const result = await authApi.register(registerData);
+      if (result.success && result.data) {
+        const { token: newToken, user: newUser } = result.data;
+        setToken(newToken);
+        setUser(newUser);
+        localStorage.setItem('sira_token', newToken);
+        localStorage.setItem('sira_user', JSON.stringify(newUser));
+      }
+      return result;
     } catch (error) {
       return {
         success: false,

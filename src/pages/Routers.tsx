@@ -137,8 +137,7 @@ export default function Routers() {
   const checkBackendAvailability = async () => {
     try {
       const response = await fetch('/api/health', {
-        method: 'GET',
-        timeout: 2000
+        method: 'GET'
       });
       return response.ok;
     } catch (error) {

@@ -142,6 +142,17 @@ export interface DVRCamera {
   companyId: string;
   createdAt: string;
   updatedAt?: string;
+  // Advanced DVR properties
+  rtspPort?: number;
+  httpPort?: number;
+  sdkPort?: number;
+  brand?: string;
+  ptzEnabled?: boolean;
+  isMotionDetection?: boolean;
+  isRecording?: boolean;
+  videoQuality?: string;
+  frameRate?: number;
+  bitRate?: number;
 }
 
 export interface ActivityLog {

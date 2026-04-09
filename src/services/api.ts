@@ -11,7 +11,6 @@ import type {
   FingerprintDevice,
   DVRCamera
 } from '@/types';
-import dvrApi from './dvr-api';
 
 const API_URL = 'https://sira-software-production.up.railway.app';
 
@@ -53,26 +52,40 @@ async function fetchWithAuth<T>(
   } catch (error) {
     return {
       success: false,
-      error: 'Network error. Please try again.',
+      error: error instanceof Error ? error.message : 'Network error',
     };
   }
 }
 
+export { fetchWithAuth };
+
 // Auth API
 export const authApi = {
-  login: (credentials: { email: string; password: string }) => 
+  login: (email: string, password: string) => 
     fetchWithAuth<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify(credentials),
+      body: JSON.stringify({ email, password }),
     }),
   
-  register: (data: { email: string; password: string; name: string; companyName?: string; phone?: string }) => 
-    fetchWithAuth<null>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  register: (data: {
+    email: string;
+    password: string;
+    name: string;
+    companyName?: string;
+    phone?: string;
+    address?: string;
+  }) => fetchWithAuth<{ token: string; user: User }>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
   
   me: () => fetchWithAuth<User>('/api/auth/me'),
+  
+  updateProfile: (data: Partial<User>) => 
+    fetchWithAuth<User>('/api/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
 // Dashboard API
@@ -99,6 +112,18 @@ export const routersApi = {
   delete: (id: string) => 
     fetchWithAuth<null>(`/api/routers/${id}`, {
       method: 'DELETE',
+    }),
+  
+  testConnection: (data: { ipAddress: string; port?: number; username?: string; password?: string }) => 
+    fetchWithAuth<{ success: boolean; message?: string; error?: string }>('/api/routers/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  
+  getLiveStats: (data: { ipAddress: string; port?: number; username?: string; password?: string }) => 
+    fetchWithAuth<{ hotspotActiveCount: number; pppoeActiveCount: number; cpuLoad: number }>('/api/routers/live-stats', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 };
 
@@ -228,47 +253,6 @@ export const dvrApi = {
     fetchWithAuth<null>(`/api/dvr/${id}`, {
       method: 'DELETE',
     }),
-  
-  // Advanced DVR features
-  testConnection: (cameraData: {
-    ipAddress: string;
-    port?: number;
-    username?: string;
-    password?: string;
-    model?: string;
-  }) => fetchWithAuth<any>('/api/dvr/test-connection', {
-    method: 'POST',
-    body: JSON.stringify(cameraData),
-  }),
-  
-  getStreamUrl: (cameraId: string, channel = 1, quality = 'main') => 
-    fetchWithAuth<{ streamUrl: string }>('/api/dvr/stream-url', {
-      method: 'POST',
-      body: JSON.stringify({ cameraId, channel, quality }),
-    }),
-  
-  controlPTZ: (cameraId: string, command: string, value = 0) => 
-    fetchWithAuth<any>('/api/dvr/ptz-control', {
-      method: 'POST',
-      body: JSON.stringify({ cameraId, command, value }),
-    }),
-  
-  startRecording: (cameraId: string, duration = 3600) => 
-    fetchWithAuth<any>('/api/dvr/start-recording', {
-      method: 'POST',
-      body: JSON.stringify({ cameraId, duration }),
-    }),
-  
-  stopRecording: (recordingId: string) => 
-    fetchWithAuth<any>('/api/dvr/stop-recording', {
-      method: 'POST',
-      body: JSON.stringify({ recordingId }),
-    }),
-  
-  getStats: () => fetchWithAuth<any>('/api/dvr/stats'),
-  
-  // Use the advanced dvrApi service
-  ...dvrApi
 };
 
 // Activity API
