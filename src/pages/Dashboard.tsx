@@ -160,7 +160,7 @@ export default function Dashboard() {
             {navItems.map((item) => (
               <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => { navigate(item.path); setSidebarOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   item.active 
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg' 

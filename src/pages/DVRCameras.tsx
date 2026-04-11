@@ -60,7 +60,8 @@ export default function DVRCameras() {
     { value: 'dahua', label: 'Dahua' },
     { value: 'axis', label: 'Axis' },
     { value: 'foscam', label: 'Foscam' },
-    { value: 'onvif', label: 'ONVIF Compatible' }
+    { value: 'onvif', label: 'ONVIF Compatible' },
+    { value: 'barcode', label: 'كاميرا باركود / QR Scanner' },
   ];
 
   const videoQualities = [
@@ -379,7 +380,7 @@ export default function DVRCameras() {
             {navItems.map((item) => (
               <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => { navigate(item.path); setSidebarOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                   item.active 
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg' 
@@ -427,13 +428,26 @@ export default function DVRCameras() {
                       />
                     </div>
                     <div>
-                      <Label>الموديل</Label>
-                      <Input 
-                        value={formData.model} 
-                        onChange={(e) => setFormData({...formData, model: e.target.value})}
-                        placeholder="مثال: Hikvision DS-7200"
-                      />
+                      <Label>نوع / ماركة الكاميرا</Label>
+                      <select
+                        value={formData.brand}
+                        onChange={(e) => setFormData({...formData, brand: e.target.value})}
+                        className="w-full p-2 border rounded-md bg-white dark:bg-gray-800"
+                      >
+                        {cameraBrands.map(brand => (
+                          <option key={brand.value} value={brand.value}>{brand.label}</option>
+                        ))}
+                      </select>
                     </div>
+                  </div>
+
+                  <div>
+                    <Label>الموديل</Label>
+                    <Input 
+                      value={formData.model} 
+                      onChange={(e) => setFormData({...formData, model: e.target.value})}
+                      placeholder="مثال: Hikvision DS-7200"
+                    />
                   </div>
 
                   <div className="grid grid-cols-4 gap-4">
