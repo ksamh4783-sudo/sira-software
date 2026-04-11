@@ -204,7 +204,7 @@ export default function Login() {
                     <Input
                       id="email"
                       type="email"
-                      placeholder="admin@sira.software"
+                      placeholder="أدخل بريدك الإلكتروني"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="pr-10 h-12 bg-white/5 border-white/10 focus:border-blue-500"

@@ -14,6 +14,8 @@ const __dirname = dirname(__filename)
 const app = express()
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'sira-pro-secret-key-2024'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@sira.software'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
 
 // Middleware
 app.use(cors({ origin: '*', credentials: true }))
@@ -84,12 +86,12 @@ const logActivity = (userId, action, details = {}) => {
 
 // Initialize Admin
 const initAdmin = async () => {
-  const exists = db.users.find(u => u.email === 'admin@sira.software')
+  const exists = db.users.find(u => u.email === ADMIN_EMAIL)
   if (!exists) {
-    const hash = await bcrypt.hash('admin123', 12)
+    const hash = await bcrypt.hash(ADMIN_PASSWORD, 12)
     db.users.push({
       id: uuidv4(),
-      email: 'admin@sira.software',
+      email: ADMIN_EMAIL,
       password: hash,
       name: 'المشرف',
       role: 'admin',
@@ -1099,7 +1101,6 @@ initAdmin().then(() => {
     console.log(`║============================================================║`)
     console.log(`║ 🚀 Server running on: http://0.0.0.0:${PORT}`)
     console.log(`║ 🔗 API URL: http://localhost:${PORT}`)
-    console.log(`║ 💻 Admin Login: admin@sira.software / admin123`)
     console.log(`║ 📝 Version: 2.0.0`)
     console.log(`║ 📍 Environment: ${process.env.NODE_ENV || 'development'}`)
     console.log(`╚══════════════════════════════════════════════════════════════╝\n`)

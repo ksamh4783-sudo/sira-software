@@ -100,10 +100,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/ksamh4783-sudo/sira-softwere.git"
+    "url": "https://github.com/ksamh4783-sudo/sira-software.git"
   },
   "bugs": {
-    "url": "https://github.com/ksamh4783-sudo/sira-softwere/issues"
+    "url": "https://github.com/ksamh4783-sudo/sira-software/issues"
   },
   "homepage": "https://github.com/ksamh4783-sudo/sira-softwere#readme",
   "engines": {

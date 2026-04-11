@@ -37,8 +37,10 @@ sira-software-pro/
 
 ## Default Credentials
 
-- Email: `admin@sira.software`
-- Password: `admin123`
+Controlled via environment variables (set in Replit Secrets):
+- `ADMIN_EMAIL` — defaults to `admin@sira.software`
+- `ADMIN_PASSWORD` — defaults to `admin123`
+- `JWT_SECRET` — secure random key (set as env var)
 
 ## Deployment
 

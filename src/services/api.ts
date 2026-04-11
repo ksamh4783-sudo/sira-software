@@ -12,7 +12,9 @@ import type {
   DVRCamera
 } from '@/types';
 
-const API_URL = 'https://sira-software-production.up.railway.app';
+// Use relative URL — Vite dev proxy forwards /api → localhost:3000
+// In production, Express serves the built frontend and handles /api directly
+const API_URL = '';
 
 function getToken(): string | null {
   return localStorage.getItem('sira_token');
@@ -197,7 +199,7 @@ export const hotspotPagesApi = {
   getAll: () => fetchWithAuth<HotspotPage[]>('/api/hotspot-pages'),
   
   getPublic: (id: string) => 
-    fetch(`${API_URL}/api/hotspot-pages/${id}/public`).then(r => r.json()),
+    fetch(`/api/hotspot-pages/${id}/public`).then(r => r.json()),
   
   create: (data: Partial<HotspotPage>) => 
     fetchWithAuth<HotspotPage>('/api/hotspot-pages', {
@@ -262,7 +264,7 @@ export const activityApi = {
 
 // Health Check
 export const healthApi = {
-  check: () => fetch(`${API_URL}/api/health`).then(r => r.json()),
+  check: () => fetch('/api/health').then(r => r.json()),
 };
 
 export default {

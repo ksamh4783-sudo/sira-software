@@ -45,3 +45,10 @@ externalPort = 3002
 deploymentTarget = "autoscale"
 run = ["node", "backend/server.js"]
 build = ["npm", "run", "build"]
+
+[userenv]
+
+[userenv.shared]
+JWT_SECRET = "d3b84612159961e4ca6280718c5512554d120ffc549d03bcef99cce68c5eac6e1e53dc180a408436ad8b83d224ef101e"
+ADMIN_EMAIL = "admin@sira.software"
+NODE_ENV = "development"
