@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { hotspotPagesApi } from '@/services/api';
+import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Globe, Plus, Search, Trash2, ArrowRight, Menu, Eye, 
+  Globe, Plus, Search, Trash2, Eye, 
   Palette, Type, Image, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,7 +29,6 @@ export default function HotspotPages() {
   const [pages, setPages] = useState<HotspotPage[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [previewPage, setPreviewPage] = useState<HotspotPage | null>(null);
   
   const [formData, setFormData] = useState({
@@ -131,58 +131,8 @@ export default function HotspotPages() {
     page.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const navItems = [
-    { icon: ArrowRight, label: 'العودة للوحة التحكم', path: '/dashboard' },
-    { icon: Globe, label: 'صفحات الهوت سبوت', path: '/hotspot-pages', active: true },
-  ];
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 right-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-xl transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 lg:static`}>
-        <div className="h-full flex flex-col">
-          <div className="p-6 border-b">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
-                <Globe className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold gradient-text">صفحات الهوت سبوت</h1>
-                <p className="text-xs text-gray-500">تصميم صفحات تسجيل الدخول</p>
-              </div>
-            </div>
-          </div>
-
-          <nav className="flex-1 p-4 space-y-1">
-            {navItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => { navigate(item.path); setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  item.active 
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg' 
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 min-w-0">
-        <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-b px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
-                <Menu className="w-6 h-6" />
-              </Button>
-              <h2 className="text-xl font-bold">صفحات الهوت سبوت</h2>
-            </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+  const addDialog = (
+    <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => { resetForm(); }}>
                   <Plus className="w-4 h-4 ml-2" />
@@ -367,10 +317,11 @@ export default function HotspotPages() {
                 </form>
               </DialogContent>
             </Dialog>
-          </div>
-        </header>
+  );
 
-        <div className="p-6 space-y-6">
+  return (
+    <Layout title="صفحات الهوت سبوت" actions={addDialog}>
+      <div className="space-y-5">
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
@@ -500,8 +451,7 @@ export default function HotspotPages() {
               <p className="text-gray-400">قم بإنشاء صفحة هوت سبوت جديدة</p>
             </div>
           )}
-        </div>
-      </main>
+      </div>
 
       {/* Preview Dialog */}
       <Dialog open={!!previewPage} onOpenChange={() => setPreviewPage(null)}>
@@ -573,6 +523,6 @@ export default function HotspotPages() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </Layout>
   );
 }

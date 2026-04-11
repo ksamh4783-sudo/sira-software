@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { fingerprintApi } from '@/services/api';
+import { fingerprintApi, fetchWithAuth } from '@/services/api';
+import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
   Fingerprint, Plus, Search, Edit2, Trash2, Power, 
-  MapPin, Users, RefreshCw, ArrowRight, Menu
+  MapPin, Users, RefreshCw, Radio, CheckCircle2, XCircle, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { FingerprintDevice } from '@/types';
@@ -22,356 +23,207 @@ export default function FingerprintDevices() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<FingerprintDevice | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [testingId, setTestingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
-    name: '',
-    ipAddress: '',
-    port: 4370,
-    model: '',
-    serialNumber: '',
-    location: ''
+    name: '', ipAddress: '', port: 4370, model: '', serialNumber: '', location: ''
   });
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
+    if (!isAuthenticated) { navigate('/login'); return; }
     fetchDevices();
   }, [isAuthenticated, navigate]);
 
   const fetchDevices = async () => {
     if (!user) return;
     const result = await fingerprintApi.getAll();
-    if (result.success && result.data) {
-      setDevices(result.data);
-    }
+    if (result.success && result.data) setDevices(result.data);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    if (editingDevice) {
-      const result = await fingerprintApi.update(editingDevice.id, formData);
-      if (result.success) {
-        toast.success('تم تحديث الجهاز بنجاح');
-        fetchDevices();
-        setIsAddDialogOpen(false);
-        setEditingDevice(null);
-      }
-    } else {
-      const result = await fingerprintApi.create(formData);
-      if (result.success) {
-        toast.success('تم إضافة الجهاز بنجاح');
-        fetchDevices();
-        setIsAddDialogOpen(false);
-        resetForm();
-      }
+    const result = editingDevice
+      ? await fingerprintApi.update(editingDevice.id, formData)
+      : await fingerprintApi.create(formData);
+    if (result.success) {
+      toast.success(editingDevice ? 'تم تحديث الجهاز' : 'تم إضافة الجهاز');
+      fetchDevices(); setIsAddDialogOpen(false); setEditingDevice(null); resetForm();
     }
   };
 
   const handleDelete = async (device: FingerprintDevice) => {
-    if (!user) return;
-    if (confirm('هل أنت متأكد من حذف هذا الجهاز؟')) {
-      const result = await fingerprintApi.delete(device.id);
-      if (result.success) {
-        toast.success('تم حذف الجهاز بنجاح');
-        fetchDevices();
-      }
-    }
+    if (!confirm('هل أنت متأكد من حذف هذا الجهاز؟')) return;
+    const result = await fingerprintApi.delete(device.id);
+    if (result.success) { toast.success('تم حذف الجهاز'); fetchDevices(); }
   };
 
-  const handleEdit = async (device: FingerprintDevice) => {
+  const handleEdit = (device: FingerprintDevice) => {
     setEditingDevice(device);
-    setFormData({
-      name: device.name,
-      ipAddress: device.ipAddress,
-      port: device.port,
-      model: device.model,
-      serialNumber: device.serialNumber || '',
-      location: device.location || ''
-    });
+    setFormData({ name: device.name, ipAddress: device.ipAddress, port: device.port, model: device.model, serialNumber: device.serialNumber || '', location: device.location || '' });
     setIsAddDialogOpen(true);
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      ipAddress: '',
-      port: 4370,
-      model: '',
-      serialNumber: '',
-      location: ''
-    });
+  const handleTestConnection = async (device: FingerprintDevice) => {
+    setTestingId(device.id);
+    const result = await fetchWithAuth<{ success: boolean; message?: string; error?: string }>(
+      `/api/fingerprint/${device.id}/test-connection`, { method: 'POST' }
+    );
+    setTestingId(null);
+    if (result.success && (result as any).data?.success) {
+      toast.success(`✅ متصل: ${device.name}`);
+      await fingerprintApi.update(device.id, { status: 'online' });
+    } else {
+      toast.error(`❌ فشل الاتصال: ${(result as any).data?.error || 'تعذر الوصول للجهاز'}`);
+      await fingerprintApi.update(device.id, { status: 'offline' });
+    }
+    fetchDevices();
   };
 
-  const filteredDevices = devices.filter(device =>
-    device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    device.ipAddress.includes(searchQuery) ||
-    device.location?.toLowerCase().includes(searchQuery.toLowerCase())
+  const resetForm = () => setFormData({ name: '', ipAddress: '', port: 4370, model: '', serialNumber: '', location: '' });
+
+  const filtered = devices.filter(d =>
+    d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    d.ipAddress.includes(searchQuery) ||
+    d.location?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const navItems = [
-    { icon: ArrowRight, label: 'العودة للوحة التحكم', path: '/dashboard' },
-    { icon: Fingerprint, label: 'أجهزة البصمة', path: '/fingerprint', active: true },
-  ];
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 right-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-xl transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 lg:static`}>
-        <div className="h-full flex flex-col">
-          <div className="p-6 border-b">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center">
-                <Fingerprint className="w-6 h-6 text-white" />
+  const actions = (
+    <div className="flex gap-2">
+      <Button variant="outline" size="icon" onClick={fetchDevices} title="تحديث">
+        <RefreshCw className="w-4 h-4" />
+      </Button>
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogTrigger asChild>
+          <Button size="sm" onClick={() => { resetForm(); setEditingDevice(null); }}>
+            <Plus className="w-4 h-4 ml-1" /> إضافة جهاز
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{editingDevice ? 'تعديل جهاز' : 'إضافة جهاز بصمة'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+            <div>
+              <Label>اسم الجهاز</Label>
+              <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="جهاز البصمة الرئيسي" required />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>عنوان IP</Label>
+                <Input value={formData.ipAddress} onChange={e => setFormData({ ...formData, ipAddress: e.target.value })} placeholder="192.168.1.100" required />
               </div>
               <div>
-                <h1 className="text-lg font-bold gradient-text">أجهزة البصمة</h1>
-                <p className="text-xs text-gray-500">إدارة أجهزة البصمة</p>
+                <Label>المنفذ</Label>
+                <Input type="number" value={formData.port} onChange={e => setFormData({ ...formData, port: parseInt(e.target.value) })} required />
               </div>
             </div>
-          </div>
-
-          <nav className="flex-1 p-4 space-y-1">
-            {navItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => { navigate(item.path); setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  item.active 
-                    ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-lg' 
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 min-w-0">
-        <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-b px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
-                <Menu className="w-6 h-6" />
-              </Button>
-              <h2 className="text-xl font-bold">أجهزة البصمة</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>الموديل</Label>
+                <Input value={formData.model} onChange={e => setFormData({ ...formData, model: e.target.value })} placeholder="ZKTeco K40" />
+              </div>
+              <div>
+                <Label>الرقم التسلسلي</Label>
+                <Input value={formData.serialNumber} onChange={e => setFormData({ ...formData, serialNumber: e.target.value })} placeholder="اختياري" />
+              </div>
             </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => { resetForm(); setEditingDevice(null); }}>
-                  <Plus className="w-4 h-4 ml-2" />
-                  إضافة جهاز
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{editingDevice ? 'تعديل جهاز' : 'إضافة جهاز بصمة جديد'}</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                  <div>
-                    <Label>اسم الجهاز</Label>
-                    <Input 
-                      value={formData.name} 
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      placeholder="مثال: جهاز البصمة الرئيسي"
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>عنوان IP</Label>
-                      <Input 
-                        value={formData.ipAddress} 
-                        onChange={(e) => setFormData({...formData, ipAddress: e.target.value})}
-                        placeholder="192.168.1.100"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label>المنفذ</Label>
-                      <Input 
-                        type="number"
-                        value={formData.port} 
-                        onChange={(e) => setFormData({...formData, port: parseInt(e.target.value)})}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>الموديل</Label>
-                      <Input 
-                        value={formData.model} 
-                        onChange={(e) => setFormData({...formData, model: e.target.value})}
-                        placeholder="مثال: ZKTeco K40"
-                      />
-                    </div>
-                    <div>
-                      <Label>الرقم التسلسلي</Label>
-                      <Input 
-                        value={formData.serialNumber} 
-                        onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
-                        placeholder="اختياري"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label>الموقع</Label>
-                    <Input 
-                      value={formData.location} 
-                      onChange={(e) => setFormData({...formData, location: e.target.value})}
-                      placeholder="مثال: المكتب الرئيسي"
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    {editingDevice ? 'تحديث' : 'إضافة'}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </header>
-
-        <div className="p-6 space-y-6">
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                  <Fingerprint className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">إجمالي الأجهزة</p>
-                  <p className="text-2xl font-bold">{devices.length}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                  <Power className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">الأجهزة النشطة</p>
-                  <p className="text-2xl font-bold">{devices.filter(d => d.status === 'online').length}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">إجمالي المستخدمين</p>
-                  <p className="text-2xl font-bold">{devices.reduce((sum, d) => sum + d.totalUsers, 0)}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
-                  <RefreshCw className="w-6 h-6 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">آخر مزامنة</p>
-                  <p className="text-sm font-medium">
-                    {devices.length > 0 && devices[0].lastSync 
-                      ? new Date(devices[0].lastSync).toLocaleDateString('ar-EG')
-                      : 'لم تتم'}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <Input 
-              placeholder="البحث في الأجهزة..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pr-10"
-            />
-          </div>
-
-          {/* Devices Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredDevices.map((device) => (
-              <Card key={device.id} className="card-hover">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        device.status === 'online' ? 'bg-green-100' : 'bg-red-100'
-                      }`}>
-                        <Fingerprint className={`w-5 h-5 ${
-                          device.status === 'online' ? 'text-green-600' : 'text-red-600'
-                        }`} />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">{device.name}</CardTitle>
-                        <Badge variant={device.status === 'online' ? 'default' : 'secondary'} className="text-xs">
-                          {device.status === 'online' ? 'متصل' : 'غير متصل'}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(device)}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(device)}>
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Power className="w-4 h-4" />
-                      <span>{device.ipAddress}:{device.port}</span>
-                    </div>
-                    {device.model && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Fingerprint className="w-4 h-4" />
-                        <span>{device.model}</span>
-                      </div>
-                    )}
-                    {device.location && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>{device.location}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Users className="w-4 h-4" />
-                      <span>{device.totalUsers} مستخدم</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {filteredDevices.length === 0 && (
-            <div className="text-center py-12">
-              <Fingerprint className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-500">لا توجد أجهزة</h3>
-              <p className="text-gray-400">قم بإضافة جهاز بصمة جديد</p>
+            <div>
+              <Label>الموقع</Label>
+              <Input value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} placeholder="المكتب الرئيسي" />
             </div>
-          )}
-        </div>
-      </main>
+            <Button type="submit" className="w-full">{editingDevice ? 'تحديث' : 'إضافة'}</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+
+  return (
+    <Layout title="أجهزة البصمة" actions={actions}>
+      <div className="space-y-5">
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: 'إجمالي الأجهزة', value: devices.length, icon: Fingerprint, color: 'bg-blue-100 text-blue-600' },
+            { label: 'متصل', value: devices.filter(d => d.status === 'online').length, icon: CheckCircle2, color: 'bg-green-100 text-green-600' },
+            { label: 'غير متصل', value: devices.filter(d => d.status === 'offline').length, icon: XCircle, color: 'bg-red-100 text-red-600' },
+            { label: 'إجمالي المستخدمين', value: devices.reduce((s, d) => s + d.totalUsers, 0), icon: Users, color: 'bg-purple-100 text-purple-600' },
+          ].map(s => (
+            <Card key={s.label}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color}`}>
+                  <s.icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">{s.label}</p>
+                  <p className="text-xl font-bold">{s.value}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input placeholder="البحث في الأجهزة..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pr-9" />
+        </div>
+
+        {/* Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(device => (
+            <Card key={device.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2 pt-4 px-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${device.status === 'online' ? 'bg-green-100' : 'bg-red-100'}`}>
+                      <Fingerprint className={`w-5 h-5 ${device.status === 'online' ? 'text-green-600' : 'text-red-600'}`} />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm">{device.name}</CardTitle>
+                      <Badge variant={device.status === 'online' ? 'default' : 'secondary'} className="text-[10px] mt-0.5">
+                        {device.status === 'online' ? 'متصل' : 'غير متصل'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => handleEdit(device)}>
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => handleDelete(device)}>
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-1">
+                <div className="space-y-1.5 text-xs text-gray-600 mb-3">
+                  <div className="flex items-center gap-1.5"><Power className="w-3.5 h-3.5" />{device.ipAddress}:{device.port}</div>
+                  {device.model && <div className="flex items-center gap-1.5"><Fingerprint className="w-3.5 h-3.5" />{device.model}</div>}
+                  {device.location && <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{device.location}</div>}
+                  <div className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />{device.totalUsers} مستخدم</div>
+                </div>
+                <Button
+                  variant="outline" size="sm" className="w-full text-xs h-8"
+                  onClick={() => handleTestConnection(device)}
+                  disabled={testingId === device.id}
+                >
+                  {testingId === device.id
+                    ? <><Loader2 className="w-3.5 h-3.5 ml-1 animate-spin" />جاري الاختبار...</>
+                    : <><Radio className="w-3.5 h-3.5 ml-1" />اختبار الاتصال</>
+                  }
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {filtered.length === 0 && (
+          <div className="text-center py-16">
+            <Fingerprint className="w-14 h-14 mx-auto text-gray-200 mb-3" />
+            <p className="text-gray-400 font-medium">لا توجد أجهزة</p>
+            <p className="text-gray-300 text-sm">قم بإضافة جهاز بصمة</p>
+          </div>
+        )}
+      </div>
+    </Layout>
   );
 }

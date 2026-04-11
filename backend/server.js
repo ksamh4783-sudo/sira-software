@@ -1,5 +1,7 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import fs from 'fs'
@@ -7,6 +9,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
 import { RouterOSAPI } from 'node-routeros'
+import FingerprintManager from './fingerprint-api.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -17,10 +20,20 @@ const JWT_SECRET = process.env.JWT_SECRET || 'sira-pro-secret-key-2024'
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@sira.software'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
 
-// Middleware
+// Security Middleware
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }))
 app.use(cors({ origin: '*', credentials: true }))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true }))
+
+// Rate Limiting for auth routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 // Serve static files from the 'dist' or 'public' directory (Vite build output)
 const distPath = join(__dirname, '../dist')

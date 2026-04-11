@@ -15,6 +15,7 @@ const Backgrounds = lazy(() => import('@/pages/Backgrounds'));
 const PrintCards = lazy(() => import('@/pages/PrintCards'));
 const HotspotPages = lazy(() => import('@/pages/HotspotPages'));
 const CreateCards = lazy(() => import('@/pages/CreateCards'));
+const Settings = lazy(() => import('@/pages/Settings'));
 
 function PageLoader() {
   return (
@@ -45,6 +46,7 @@ function App() {
               <Route path="/print-cards" element={<PrintCards />} />
               <Route path="/hotspot-pages" element={<HotspotPages />} />
               <Route path="/create-cards" element={<CreateCards />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </Suspense>
         </BrowserRouter>
