@@ -51,8 +51,24 @@ Controlled via environment variables (set in Replit Secrets):
 ## Key Features
 
 - MikroTik router management via RouterOS API
-- Hotspot voucher generation and tracking
-- Captive portal designer
-- DVR camera and fingerprint device management
-- JWT-based authentication
+- Hotspot voucher generation, tracking, and CSV export
+- Captive portal designer (Hotspot Pages)
+- DVR camera management with live stream preview
+- Fingerprint device management with connection testing
+- JWT-based authentication with bcrypt password hashing
+- Auto-refreshing Dashboard (every 30 seconds) with animated counters
+- Settings page (profile, password change, system preferences)
+- Shared Layout component used by all pages (RTL Arabic UI)
+- Backend security: Helmet headers + rate limiting on auth endpoints
 - Local storage API fallback for offline operation
+
+## Backend API Routes
+
+- `POST /api/auth/login` — rate-limited
+- `POST /api/auth/register` — rate-limited
+- `PUT /api/auth/profile` — update profile fields
+- `PUT /api/auth/change-password` — verify + hash new password
+- `GET /api/settings` — get per-user settings
+- `PUT /api/settings` — update per-user settings
+- `POST /api/fingerprint/:id/test-connection` — test device connectivity
+- Full CRUD: `/api/routers`, `/api/vouchers`, `/api/fingerprint`, `/api/dvr`, `/api/hotspot-pages`, `/api/backgrounds`, `/api/print-cards`

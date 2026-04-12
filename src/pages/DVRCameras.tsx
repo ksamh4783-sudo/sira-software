@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import Layout from '@/components/Layout';
 import { 
   Camera, Plus, Search, Edit2, Trash2, 
-  MapPin, Video, ArrowRight, Menu, Eye, EyeOff,
+  MapPin, Video, Eye, EyeOff,
   Play, Square, Settings, RotateCcw, Download,
   Film, Radio, Wifi, WifiOff,
   Move, ZoomIn, ZoomOut
@@ -25,7 +26,6 @@ export default function DVRCameras() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCamera, setEditingCamera] = useState<DVRCamera | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [cameraStats, setCameraStats] = useState<any>(null);
   const [selectedCamera, setSelectedCamera] = useState<DVRCamera | null>(null);
@@ -354,58 +354,8 @@ export default function DVRCameras() {
     camera.model?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const navItems = [
-    { icon: ArrowRight, label: 'العودة للوحة التحكم', path: '/dashboard' },
-    { icon: Camera, label: 'كاميرات DVR', path: '/dvr', active: true },
-  ];
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 right-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-xl transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 lg:static`}>
-        <div className="h-full flex flex-col">
-          <div className="p-6 border-b">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <Camera className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold gradient-text">كاميرات DVR</h1>
-                <p className="text-xs text-gray-500">إدارة كاميرات المراقبة</p>
-              </div>
-            </div>
-          </div>
-
-          <nav className="flex-1 p-4 space-y-1">
-            {navItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => { navigate(item.path); setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  item.active 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg' 
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 min-w-0">
-        <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-b px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
-                <Menu className="w-6 h-6" />
-              </Button>
-              <h2 className="text-xl font-bold">كاميرات DVR</h2>
-            </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+  const addDialog = (
+    <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => { resetForm(); setEditingCamera(null); }}>
                   <Plus className="w-4 h-4 ml-2" />
@@ -601,10 +551,11 @@ export default function DVRCameras() {
                 </form>
               </DialogContent>
             </Dialog>
-          </div>
-        </header>
+  );
 
-        <div className="p-6 space-y-6">
+  return (
+    <Layout title="كاميرات DVR" actions={addDialog}>
+      <div className="space-y-5">
           {/* Stats */}
           {cameraStats && (
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -787,9 +738,6 @@ export default function DVRCameras() {
               <p className="text-gray-400">قم بإضافة كاميرا DVR جديدة</p>
             </div>
           )}
-        </div>
-      </main>
-
       {/* Stream Dialog */}
       <Dialog open={isStreamDialogOpen} onOpenChange={setIsStreamDialogOpen}>
         <DialogContent className="max-w-4xl">
@@ -883,6 +831,7 @@ export default function DVRCameras() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </Layout>
   );
 }

@@ -141,7 +141,7 @@ const authenticateToken = (req, res, next) => {
 // ==================== AUTH ====================
 
 // Login
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body
     
@@ -192,7 +192,7 @@ app.post('/api/auth/login', async (req, res) => {
 })
 
 // Register
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
     const { email, password, name, companyName, phone, address } = req.body
     
@@ -318,6 +318,48 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
     console.error('Profile update error:', error)
     res.status(500).json({ error: 'Profile update failed' })
   }
+})
+
+// Change password
+app.put('/api/auth/change-password', authenticateToken, async (req, res) => {
+  try {
+    const user = db.users.find(u => u.id === req.user.id)
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    const { currentPassword, newPassword } = req.body
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new passwords are required' })
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' })
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.password)
+    if (!isValid) return res.status(401).json({ error: 'Current password is incorrect' })
+
+    user.password = await bcrypt.hash(newPassword, 10)
+    saveDB()
+    logActivity(user.id, 'PASSWORD_CHANGED', {})
+    res.json({ success: true, message: 'Password changed successfully' })
+  } catch (error) {
+    console.error('Change password error:', error)
+    res.status(500).json({ error: 'Failed to change password' })
+  }
+})
+
+// ==================== SETTINGS ====================
+
+app.get('/api/settings', authenticateToken, (req, res) => {
+  if (!db.settings) db.settings = {}
+  const userSettings = db.settings[req.user.id] || {}
+  res.json({ success: true, data: userSettings })
+})
+
+app.put('/api/settings', authenticateToken, (req, res) => {
+  if (!db.settings) db.settings = {}
+  db.settings[req.user.id] = { ...db.settings[req.user.id], ...req.body }
+  saveDB()
+  res.json({ success: true, data: db.settings[req.user.id] })
 })
 
 // ==================== DASHBOARD ====================
@@ -1009,6 +1051,26 @@ app.delete('/api/fingerprint/:id', authenticateToken, (req, res) => {
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete device', success: false })
+  }
+})
+
+// Test fingerprint device connection
+app.post('/api/fingerprint/:id/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const device = db.fingerprintDevices.find(d => d.id === id && d.companyId === req.user.id)
+    if (!device) return res.status(404).json({ error: 'Device not found', success: false })
+
+    const result = await FingerprintManager.testConnection(device.ipAddress, device.port || 4370)
+
+    device.status = result.success ? 'online' : 'offline'
+    device.lastSync = new Date().toISOString()
+    saveDB()
+
+    res.json({ success: result.success, message: result.message || (result.success ? 'Connection successful' : 'Connection failed'), data: result })
+  } catch (error) {
+    console.error('Fingerprint test connection error:', error)
+    res.status(500).json({ error: 'Test connection failed', success: false })
   }
 })
 
