@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { 
-  Router, Ticket, DollarSign, Plus, Wifi, 
+  Router, Ticket, DollarSign, Wifi, 
   Image, CreditCard, Globe, Activity, ArrowUpRight, 
   ArrowDownRight, Bell, Settings, RefreshCw, Fingerprint, Camera,
   Clock, CheckCircle2

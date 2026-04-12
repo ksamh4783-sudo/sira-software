@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { } = useAuth();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

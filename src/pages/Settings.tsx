@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   Settings as SettingsIcon, Save, User, Bell, 
-  Shield, Wifi, Building, Phone, Mail, Globe,
+  Shield, Wifi, Building, Globe,
   CheckCircle2, Eye, EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';

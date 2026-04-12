@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
   Router, Plus, Search, Edit2, Trash2, Power, 
-  MapPin, Wifi, Settings, Activity,
+  MapPin, Wifi, Activity,
   Zap, LayoutTemplate, Users, ShieldCheck, Terminal,
   RefreshCw, CheckCircle2, XCircle, Loader2
 } from 'lucide-react';
@@ -20,7 +20,7 @@ import type { Router as RouterType } from '@/types';
 
 export default function Routers() {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [routers, setRouters] = useState<RouterType[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
