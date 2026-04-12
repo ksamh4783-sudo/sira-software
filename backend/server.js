@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
 import { RouterOSAPI } from 'node-routeros'
 import FingerprintManager from './fingerprint-api.js'
+import { setupReplitAuth, createSession } from './replitAuth.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -137,6 +138,12 @@ const authenticateToken = (req, res, next) => {
     return res.status(403).json({ error: 'Invalid or expired token' })
   }
 }
+
+// ==================== REPLIT AUTH ====================
+
+setupReplitAuth(app, db, saveDB, logActivity).catch(err =>
+  console.error('Replit Auth setup error:', err)
+)
 
 // ==================== AUTH ====================
 

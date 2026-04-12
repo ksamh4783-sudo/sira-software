@@ -267,6 +267,23 @@ export default function Login() {
                 <div className="relative flex justify-center text-xs uppercase"><span className="bg-[#0f172a] px-2 text-gray-500">أو</span></div>
               </div>
 
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-12 border-orange-500/50 text-orange-400 hover:bg-orange-500/10 gap-2"
+                onClick={() => { window.location.href = '/api/login'; }}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 4.5a3 3 0 110 6 3 3 0 010-6zm0 15.75a9 9 0 01-7.5-4.02c.037-2.484 5.003-3.855 7.5-3.855 2.49 0 7.463 1.371 7.5 3.855A9 9 0 0112 20.25z"/>
+                </svg>
+                تسجيل الدخول بـ Replit
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-[#0f172a] px-2 text-gray-500">أو</span></div>
+              </div>
+
               <Button variant="outline" className="w-full h-12 border-green-500/50 text-green-400 hover:bg-green-500/10" onClick={handleWhatsApp}>
                 <MessageCircle className="ml-2 w-5 h-5" />تواصل معنا على واتساب
               </Button>

@@ -16,6 +16,7 @@ const PrintCards = lazy(() => import('@/pages/PrintCards'));
 const HotspotPages = lazy(() => import('@/pages/HotspotPages'));
 const CreateCards = lazy(() => import('@/pages/CreateCards'));
 const Settings = lazy(() => import('@/pages/Settings'));
+const AuthCallback = lazy(() => import('@/pages/AuthCallback'));
 
 function PageLoader() {
   return (
@@ -47,6 +48,7 @@ function App() {
               <Route path="/hotspot-pages" element={<HotspotPages />} />
               <Route path="/create-cards" element={<CreateCards />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/auth-callback" element={<AuthCallback />} />
             </Routes>
           </Suspense>
         </BrowserRouter>
