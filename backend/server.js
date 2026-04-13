@@ -1137,7 +1137,7 @@ app.delete('/api/dvr/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params
     const index = db.dvrCameras.findIndex(c => c.id === id && c.companyId === req.user.id)
-    
+
     if (index === -1) {
       return res.status(404).json({ error: 'Camera not found' })
     }
@@ -1148,6 +1148,252 @@ app.delete('/api/dvr/:id', authenticateToken, (req, res) => {
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete camera' })
+  }
+})
+
+// ==================== DVR ADVANCED ENDPOINTS ====================
+
+// Test DVR camera connection
+app.post('/api/dvr/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { ipAddress, port, username, password, model } = req.body
+
+    if (!ipAddress) {
+      return res.status(400).json({ error: 'Camera IP address is required' })
+    }
+
+    const httpPort = port || 80
+    const testUrl = `http://${ipAddress}:${httpPort}`
+
+    // Test HTTP connection
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    try {
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(`${username || 'admin'}:${password || ''}`).toString('base64')
+        }
+      })
+      clearTimeout(timeoutId)
+
+      if (response.ok || response.status === 401) {
+        return res.json({ success: true, message: 'Connection successful' })
+      }
+    } catch (fetchError) {
+      // Fetch failed, try TCP connection test
+      const net = require('net')
+
+      return new Promise((resolve) => {
+        const socket = new net.Socket()
+        socket.setTimeout(3000)
+
+        socket.on('connect', () => {
+          socket.destroy()
+          resolve(res.json({ success: true, message: 'TCP connection successful' }))
+        })
+
+        socket.on('error', () => {
+          resolve(res.status(500).json({ error: 'Connection failed: Camera not reachable' }))
+        })
+
+        socket.connect(httpPort, ipAddress)
+      })
+    }
+
+    res.status(500).json({ error: 'Connection failed: Camera not reachable' })
+  } catch (error) {
+    console.error('DVR test connection error:', error)
+    res.status(500).json({ error: 'Test connection failed: ' + error.message })
+  }
+})
+
+// Get DVR stream URL
+app.post('/api/dvr/stream-url', authenticateToken, async (req, res) => {
+  try {
+    const { cameraId, channel = 1, quality = 'main' } = req.body
+
+    if (!cameraId) {
+      return res.status(400).json({ error: 'Camera ID is required' })
+    }
+
+    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
+    if (!camera) {
+      return res.status(404).json({ error: 'Camera not found' })
+    }
+
+    // Generate RTSP URL based on brand
+    let streamUrl = ''
+    const brand = (camera.brand || 'onvif').toLowerCase()
+    const rtspPort = camera.rtspPort || 554
+    const username = encodeURIComponent(camera.username || 'admin')
+    const password = encodeURIComponent(camera.password || '')
+
+    switch (brand) {
+      case 'hikvision':
+        streamUrl = `rtsp://${username}:${password}@${camera.ipAddress}:${rtspPort}/h264/ch${channel}/${quality}/av_stream`
+        break
+      case 'dahua':
+        streamUrl = `rtsp://${username}:${password}@${camera.ipAddress}:${rtspPort}/cam/realmonitor?channel=${channel}&subtype=0`
+        break
+      case 'axis':
+        streamUrl = `rtsp://${username}:${password}@${camera.ipAddress}:${rtspPort}/axis-media/media.amp`
+        break
+      case 'foscam':
+        streamUrl = `rtsp://${username}:${password}@${camera.ipAddress}:${rtspPort}/videoMain`
+        break
+      default:
+        streamUrl = camera.streamUrl || `rtsp://${username}:${password}@${camera.ipAddress}:${rtspPort}/stream1`
+    }
+
+    res.json({ success: true, data: { streamUrl, cameraId: camera.id } })
+  } catch (error) {
+    console.error('Stream URL error:', error)
+    res.status(500).json({ error: 'Failed to get stream URL' })
+  }
+})
+
+// PTZ Control
+app.post('/api/dvr/ptz-control', authenticateToken, async (req, res) => {
+  try {
+    const { cameraId, command, value = 0 } = req.body
+
+    if (!cameraId || !command) {
+      return res.status(400).json({ error: 'Camera ID and command are required' })
+    }
+
+    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
+    if (!camera) {
+      return res.status(404).json({ error: 'Camera not found' })
+    }
+
+    if (!camera.ptzEnabled) {
+      return res.status(400).json({ error: 'PTZ not enabled for this camera' })
+    }
+
+    // PTZ control URLs for different brands
+    const brand = (camera.brand || 'onvif').toLowerCase()
+    const httpPort = camera.httpPort || camera.port || 80
+    const username = camera.username || 'admin'
+    const password = camera.password || ''
+    const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64')
+
+    let ptzUrl = ''
+
+    switch (brand) {
+      case 'hikvision':
+        const hikvisionCommands = { up: '21', down: '22', left: '23', right: '24', zoomin: '11', zoomout: '12' }
+        const hikCmd = hikvisionCommands[command.toLowerCase()]
+        if (hikCmd) {
+          ptzUrl = `http://${camera.ipAddress}:${httpPort}/ISAPI/PTZCtrl/channels/1/${hikCmd}`
+        }
+        break
+      case 'dahua':
+        const dahuaCommands = { up: 'Up', down: 'Down', left: 'Left', right: 'Right', zoomin: 'ZoomTele', zoomout: 'ZoomWide' }
+        const dahCmd = dahuaCommands[command.toLowerCase()]
+        if (dahCmd) {
+          ptzUrl = `http://${camera.ipAddress}:${httpPort}/cgi-bin/ptz.cgi?action=start&channel=0&code=${dahCmd}&arg1=0&arg2=0&arg3=0`
+        }
+        break
+      case 'axis':
+        const axisCommands = { up: 'continuouspantiltmove=0,30', down: 'continuouspantiltmove=0,-30', left: 'continuouspantiltmove=-30,0', right: 'continuouspantiltmove=30,0', stop: 'continuouspantiltmove=0,0' }
+        const axisCmd = axisCommands[command.toLowerCase()]
+        if (axisCmd) {
+          ptzUrl = `http://${camera.ipAddress}:${httpPort}/axis-cgi/com/ptz.cgi?${axisCmd}`
+        }
+        break
+      default:
+        return res.status(400).json({ error: 'PTZ not supported for this camera brand' })
+    }
+
+    if (!ptzUrl) {
+      return res.status(400).json({ error: 'Invalid PTZ command' })
+    }
+
+    // Send PTZ command (fire and forget)
+    fetch(ptzUrl, {
+      method: command.toLowerCase() === 'stop' ? 'GET' : 'PUT',
+      headers: { 'Authorization': authHeader },
+      timeout: 2000
+    }).catch(() => {})
+
+    res.json({ success: true, message: `PTZ command executed: ${command}` })
+  } catch (error) {
+    console.error('PTZ control error:', error)
+    res.status(500).json({ error: 'PTZ control failed: ' + error.message })
+  }
+})
+
+// Start recording
+app.post('/api/dvr/start-recording', authenticateToken, async (req, res) => {
+  try {
+    const { cameraId, duration = 3600 } = req.body
+
+    if (!cameraId) {
+      return res.status(400).json({ error: 'Camera ID is required' })
+    }
+
+    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
+    if (!camera) {
+      return res.status(404).json({ error: 'Camera not found' })
+    }
+
+    const recordingId = uuidv4()
+    const startTime = new Date().toISOString()
+
+    // Update camera status in database
+    const cameraIndex = db.dvrCameras.findIndex(c => c.id === cameraId)
+    if (cameraIndex !== -1) {
+      db.dvrCameras[cameraIndex].isRecording = true
+      saveDB()
+    }
+
+    logActivity(req.user.id, 'DVR_RECORDING_STARTED', { cameraId, cameraName: camera.name })
+
+    res.json({
+      success: true,
+      message: 'Recording started',
+      data: { recordingId, cameraId, startTime, duration }
+    })
+  } catch (error) {
+    console.error('Start recording error:', error)
+    res.status(500).json({ error: 'Failed to start recording: ' + error.message })
+  }
+})
+
+// Stop recording
+app.post('/api/dvr/stop-recording', authenticateToken, async (req, res) => {
+  try {
+    const { recordingId, cameraId } = req.body
+
+    if (!cameraId) {
+      return res.status(400).json({ error: 'Camera ID is required' })
+    }
+
+    const camera = db.dvrCameras.find(c => c.id === cameraId && c.companyId === req.user.id)
+    if (!camera) {
+      return res.status(404).json({ error: 'Camera not found' })
+    }
+
+    // Update camera status in database
+    const cameraIndex = db.dvrCameras.findIndex(c => c.id === cameraId)
+    if (cameraIndex !== -1) {
+      db.dvrCameras[cameraIndex].isRecording = false
+      saveDB()
+    }
+
+    logActivity(req.user.id, 'DVR_RECORDING_STOPPED', { cameraId, cameraName: camera.name })
+
+    res.json({
+      success: true,
+      message: 'Recording stopped',
+      data: { recordingId, cameraId, stopTime: new Date().toISOString() }
+    })
+  } catch (error) {
+    console.error('Stop recording error:', error)
+    res.status(500).json({ error: 'Failed to stop recording: ' + error.message })
   }
 })
 
